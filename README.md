@@ -1,4 +1,4 @@
-Buddha
+Buddha (0.0.1)
 ===============
 
 Buddha is an RTMP Server that receives a streaming video from a Flash client and writes the video into an FLV file.
