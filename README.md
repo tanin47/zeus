@@ -1,9 +1,7 @@
-Buddha (0.0.1)
+Zeus (0.0.1)
 ===============
 
-Buddha is an RTMP Server that receives a streaming video from a Flash client and writes the video into an FLV file.
-
-(And, oh yeah, I've named this server __Buddha__.)
+Zeus is an RTMP Server that receives a streaming video from a Flash client and writes the video into an FLV file.
 
 
 How to use it
@@ -18,7 +16,7 @@ Build it with:
 And run with:
 
 ```
-./bin/buddha
+./bin/zeus
 ```
 
 The server will be run on ```rtmp://localhost:1935```
