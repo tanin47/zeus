@@ -1,0 +1,57 @@
+#include <stdio.h>
+#include <string.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netdb.h>
+#include <arpa/inet.h>
+#include <netinet/in.h>
+
+#include "dbg.h"
+
+#define SERVER_PORT "1935"
+#define BACKLOG 10
+
+int main(int argc, char *argv[])
+{
+  struct sockaddr_storage their_addr;
+  socklen_t addr_size;
+  struct addrinfo hints, *res;
+  int sockfd, new_fd;
+
+  memset(&hints, 0, sizeof hints);
+  hints.ai_family = AF_UNSPEC;
+  hints.ai_socktype = SOCK_STREAM;
+  hints.ai_flags = AI_PASSIVE;
+
+  getaddrinfo(NULL, SERVER_PORT, &hints, &res);
+
+  sockfd = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
+
+  int yes=1;
+  if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int)) == -1) {
+      perror("setsockopt");
+      exit(1);
+  } 
+
+  bind(sockfd, res->ai_addr, res->ai_addrlen);
+  listen(sockfd, BACKLOG);
+
+  printf("Wait for a connection...\n");
+
+  addr_size = sizeof their_addr;
+  new_fd = accept(sockfd, (struct sockaddr *)&their_addr, &addr_size);
+
+  printf("Somebody connects!\n");
+
+  char buf[1];
+
+  while (1) {
+    int count = recv(new_fd, buf, 1, 0);
+    printf("Read %d %d\n", count, buf[0]);
+
+    break;
+  }
+
+  printf("Prepare to exit\n");
+  return 0;
+}

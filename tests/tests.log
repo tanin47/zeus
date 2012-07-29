@@ -1,0 +1,4 @@
+DEBUG tests/ringbuffer_tests.c:30: ----- RUNNING: ./tests/ringbuffer_tests
+DEBUG tests/ringbuffer_tests.c:25: 
+----- test_ringbuffer
+DEBUG src/lcthw/ringbuffer.c:52: Not enough in the buffer: has 6, needs 10
