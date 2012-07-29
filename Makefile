@@ -16,8 +16,7 @@ SO_TARGET=$(patsubst %.a,%.so,$(TARGET))
 
  
 # The Target Build 
-all: clean $(TARGEcc -g -O2 -Wall -Wextra -Isrc -rdynamic -DNDEBUG  bin/zeus.c build/lib_zeus.a  /usr/lib/libevent.a -o bin/zeus -lrt
-T) $(SO_TARGET) tests $(PROGRAMS) 
+all: clean $(TARGET) $(SO_TARGET) tests $(PROGRAMS) 
 
 dev: CFLAGS=-g -Wall -Isrc -Wall -Wextra $(OPTFLAGS) 
 dev: clean all 
@@ -34,8 +33,10 @@ $(PROGRAMS):
 	$(CC) $(CFLAGS) $(PROGRAMS_SRC) $(TARGET) $(LIBS) -o $@ -lrt
 
 $(TESTS): 
-	$(CC) $(CFLAGS) $(TEST_SRC) $(TARGET) $(LIBS) -o $@ -lrt
- 
+	$(foreach file, $(TEST_SRC), \
+		$(CC) $(CFLAGS) $(file) $(TARGET) $(LIBS) -o $(subst .c,,$(file)) -lrt; \
+	)
+
 build: 
 	@mkdir -p build 
 	@mkdir -p bin 

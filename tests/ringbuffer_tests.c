@@ -5,12 +5,13 @@ char *test_ringbuffer()
 {
   RingBuffer* r = RingBuffer_create(100);
 
-  printf("Available data: %d\n", RingBuffer_available_space(r));
+  printf("Available space: %d\n", RingBuffer_available_space(r));
 
-  RingBuffer_write(r, "abcde\0", 6);
+  printf("Write: %d\n", RingBuffer_write(r, "abcde\0", 6));
+  printf("Available data: %d\n", RingBuffer_available_data(r));
 
   char buffer[10];
-  int count = RingBuffer_read(r, buffer, 10);  
+  int count = RingBuffer_read(r, buffer, 4);  
 
   printf("Read %d %s\n", count, buffer);
 

@@ -48,11 +48,12 @@ error:
 int RingBuffer_read(RingBuffer *buffer, char *target, int amount)
 {
     check_debug(amount <= RingBuffer_available_data(buffer),
-            "Not enough in the buffer: has %d, needs %d",
+            "Not enough in the buffer: has %d, wants to read %d",
             RingBuffer_available_data(buffer), amount);
 
     void *result = memcpy(target, RingBuffer_starts_at(buffer), amount);
     check(result != NULL, "Failed to write buffer into data.");
+
 
     RingBuffer_commit_read(buffer, amount);
 

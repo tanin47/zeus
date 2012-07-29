@@ -1,4 +1,6 @@
-DEBUG tests/ringbuffer_tests.c:30: ----- RUNNING: ./tests/ringbuffer_tests
-DEBUG tests/ringbuffer_tests.c:25: 
+DEBUG tests/ringbuffer_tests.c:31: ----- RUNNING: ./tests/ringbuffer_tests
+DEBUG tests/ringbuffer_tests.c:26: 
 ----- test_ringbuffer
-DEBUG src/lcthw/ringbuffer.c:52: Not enough in the buffer: has 6, needs 10
+DEBUG tests/rtmp_tests.c:30: ----- RUNNING: ./tests/rtmp_tests
+DEBUG tests/rtmp_tests.c:25: 
+----- test_enum
