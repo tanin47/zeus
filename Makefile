@@ -1,5 +1,5 @@
 CFLAGS=-g -O2 -Wall -Wextra -Isrc -rdynamic -DNDEBUG $(OPTFLAGS)
-LIBS=-ldl $(OPTLIBS) 
+LIBS=/usr/lib/libevent.a
 PREFIX?=/usr/local 
  
 SOURCES=$(wildcard src/**/*.c src/*.c) 
@@ -13,9 +13,11 @@ PROGRAMS=$(patsubst %.c,%,$(PROGRAMS_SRC))
  
 TARGET=build/lib_zeus.a 
 SO_TARGET=$(patsubst %.a,%.so,$(TARGET)) 
+
  
 # The Target Build 
-all: $(TARGET) $(SO_TARGET) tests $(PROGRAMS) 
+all: clean $(TARGEcc -g -O2 -Wall -Wextra -Isrc -rdynamic -DNDEBUG  bin/zeus.c build/lib_zeus.a  /usr/lib/libevent.a -o bin/zeus -lrt
+T) $(SO_TARGET) tests $(PROGRAMS) 
 
 dev: CFLAGS=-g -Wall -Isrc -Wall -Wextra $(OPTFLAGS) 
 dev: clean all 
@@ -28,10 +30,11 @@ $(TARGET): build $(OBJECTS)
 $(SO_TARGET): $(TARGET) $(OBJECTS) 
 	$(CC) -shared -o $@ $(OBJECTS)
 
-$(PROGRAMS): CFLAGS += $(TARGET)	 
+$(PROGRAMS):	 
+	$(CC) $(CFLAGS) $(PROGRAMS_SRC) $(TARGET) $(LIBS) -o $@ -lrt
 
 $(TESTS): 
-	$(CC) $(CFLAGS) $(TEST_SRC) $(TARGET) -o $@
+	$(CC) $(CFLAGS) $(TEST_SRC) $(TARGET) $(LIBS) -o $@ -lrt
  
 build: 
 	@mkdir -p build 

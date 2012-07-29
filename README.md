@@ -21,10 +21,18 @@ And run with:
 
 The server will be run on ```rtmp://localhost:1935```
 
+
+Required Libraries
+-------------------
+
+* libevent
+
+
 Author
 -------------
 
 * Tanin Na Nakorn
+
 
 
 License
