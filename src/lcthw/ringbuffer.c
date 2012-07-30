@@ -25,7 +25,7 @@ void RingBuffer_destroy(RingBuffer *buffer)
     }
 }
 
-int RingBuffer_write(RingBuffer *buffer, char *data, int length)
+int RingBuffer_write(RingBuffer *buffer, unsigned char *data, int length)
 {
     if(RingBuffer_available_data(buffer) == 0) {
         buffer->start = buffer->end = 0;
@@ -45,7 +45,7 @@ error:
     return -1;
 }
 
-int RingBuffer_read(RingBuffer *buffer, char *target, int amount)
+int RingBuffer_read(RingBuffer *buffer, unsigned char *target, int amount)
 {
     check_debug(amount <= RingBuffer_available_data(buffer),
             "Not enough in the buffer: has %d, wants to read %d",

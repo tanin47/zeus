@@ -7,10 +7,10 @@ char *test_ringbuffer()
 
   printf("Available space: %d\n", RingBuffer_available_space(r));
 
-  printf("Write: %d\n", RingBuffer_write(r, "abcde\0", 6));
+  printf("Write: %d\n", RingBuffer_write(r, (unsigned char *)"abcde\0", 6));
   printf("Available data: %d\n", RingBuffer_available_data(r));
 
-  char buffer[10];
+  unsigned char buffer[10];
   int count = RingBuffer_read(r, buffer, 4);  
 
   printf("Read %d %s\n", count, buffer);

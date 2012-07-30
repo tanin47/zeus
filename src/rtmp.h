@@ -11,7 +11,9 @@ typedef enum {
   WAIT_FOR_C1,
   WAIT_FOR_C2,
   READ_CHUNK_TYPE,
-  READ_CHUNK_ID,
+  READ_CHUNK_EXTENDED_ID,
+  READ_CHUNK_HEADER,
+  READ_CHUNK_EXTENDED_TIMESTAMP,
   READ_CHUNK_DATA
 } RtmpState;
 
@@ -19,7 +21,8 @@ typedef enum {
   UNRECOGNIZED_CHUNK_TYPE, 
   TYPE_0,
   TYPE_1,
-  TYPE_2
+  TYPE_2,
+  TYPE_3
 } RtmpChunkType;
 
 typedef struct {
@@ -28,13 +31,17 @@ typedef struct {
 
 
   RtmpChunkType chunk_type;
-  char chunk_first_byte;
   unsigned int chunk_id;
+  unsigned int chunk_timestamp;
+  unsigned int packet_length;
+  unsigned int chunk_size;
+  int chunk_write_to;
 
+  unsigned char *message;
 } Rtmp;
 
-unsigned int chars_to_int(char *arr, int len);
-unsigned int chars_to_int_little_endian(char *arr, int len);
+unsigned int chars_to_int(unsigned char *arr, int len);
+unsigned int chars_to_int_little_endian(unsigned char *arr, int len);
 
 Rtmp *rtmp_create();
 void rtmp_destroy(Rtmp *rtmp);
@@ -46,15 +53,21 @@ int rtmp_process_c2(Rtmp *rtmp, RingBuffer *buffer, RingBuffer *write_buffer);
 
 int rtmp_process_read_chunk_type(Rtmp *rtmp, RingBuffer *buffer, RingBuffer *write_buffer);
 
-int rtmp_process_read_chunk_id(Rtmp *rtmp, RingBuffer *buffer, RingBuffer *write_buffer);
-int rtmp_process_read_chunk_id_type_0(Rtmp *rtmp, RingBuffer *buffer, RingBuffer *write_buffer);
-int rtmp_process_read_chunk_id_type_1(Rtmp *rtmp, RingBuffer *buffer, RingBuffer *write_buffer);
-int rtmp_process_read_chunk_id_type_2(Rtmp *rtmp, RingBuffer *buffer, RingBuffer *write_buffer);
+int rtmp_process_read_chunk_extended_id(Rtmp *rtmp, RingBuffer *buffer, RingBuffer *write_buffer);
+
+int rtmp_process_read_chunk_header(Rtmp *rtmp, RingBuffer *buffer, RingBuffer *write_buffer);
+int rtmp_process_read_chunk_header_type_0(Rtmp *rtmp, RingBuffer *buffer, RingBuffer *write_buffer);
+int rtmp_process_read_chunk_header_type_1(Rtmp *rtmp, RingBuffer *buffer, RingBuffer *write_buffer);
+int rtmp_process_read_chunk_header_type_2(Rtmp *rtmp, RingBuffer *buffer, RingBuffer *write_buffer);
+int rtmp_process_read_chunk_header_type_3(Rtmp *rtmp, RingBuffer *buffer, RingBuffer *write_buffer);
+
+int rtmp_process_read_chunk_extended_timestamp(Rtmp *rtmp, RingBuffer *buffer, RingBuffer *write_buffer);
 
 int rtmp_process_read_chunk_data(Rtmp *rtmp, RingBuffer *buffer, RingBuffer *write_buffer);
 int rtmp_process_read_chunk_data_type_0(Rtmp *rtmp, RingBuffer *buffer, RingBuffer *write_buffer);
 int rtmp_process_read_chunk_data_type_1(Rtmp *rtmp, RingBuffer *buffer, RingBuffer *write_buffer);
 int rtmp_process_read_chunk_data_type_2(Rtmp *rtmp, RingBuffer *buffer, RingBuffer *write_buffer);
+int rtmp_process_read_chunk_data_type_3(Rtmp *rtmp, RingBuffer *buffer, RingBuffer *write_buffer);
 
 
 #endif
