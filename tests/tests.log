@@ -1,3 +1,45 @@
+DEBUG tests/amf0_tests.c:53: ----- RUNNING: ./tests/amf0_tests
+DEBUG tests/amf0_tests.c:48: 
+----- test_functions
+DEBUG tests/darray_tests.c:123: ----- RUNNING: ./tests/darray_tests
+DEBUG tests/darray_tests.c:111: 
+----- test_create
+DEBUG tests/darray_tests.c:112: 
+----- test_new
+DEBUG tests/darray_tests.c:113: 
+----- test_set
+DEBUG tests/darray_tests.c:114: 
+----- test_get
+DEBUG tests/darray_tests.c:115: 
+----- test_remove
+DEBUG tests/darray_tests.c:116: 
+----- test_expand_contract
+DEBUG tests/darray_tests.c:117: 
+----- test_push_pop
+DEBUG tests/darray_tests.c:118: 
+----- test_destroy
+DEBUG tests/hashmap_tests.c:122: ----- RUNNING: ./tests/hashmap_tests
+DEBUG tests/hashmap_tests.c:113: 
+----- test_create
+DEBUG tests/hashmap_tests.c:114: 
+----- test_get_set
+DEBUG src/lcthw/hashmap.c:146: TRY: 0
+DEBUG src/lcthw/hashmap.c:146: TRY: 0
+DEBUG src/lcthw/hashmap.c:146: TRY: 0
+DEBUG tests/hashmap_tests.c:115: 
+----- test_traverse
+DEBUG tests/hashmap_tests.c:17: KEY: test data 1
+DEBUG tests/hashmap_tests.c:17: KEY: test data 2
+DEBUG tests/hashmap_tests.c:17: KEY: xest data 3
+DEBUG tests/hashmap_tests.c:25: KEY: test data 1
+DEBUG tests/hashmap_tests.c:25: KEY: test data 2
+DEBUG tests/hashmap_tests.c:116: 
+----- test_delete
+DEBUG src/lcthw/hashmap.c:146: TRY: 0
+DEBUG src/lcthw/hashmap.c:146: TRY: 0
+DEBUG src/lcthw/hashmap.c:146: TRY: 0
+DEBUG tests/hashmap_tests.c:117: 
+----- test_destroy
 DEBUG tests/ringbuffer_tests.c:31: ----- RUNNING: ./tests/ringbuffer_tests
 DEBUG tests/ringbuffer_tests.c:26: 
 ----- test_ringbuffer

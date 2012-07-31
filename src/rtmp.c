@@ -1,32 +1,5 @@
 #include <rtmp.h>
 
-unsigned int chars_to_int(unsigned char *arr, int len) {
-  unsigned int ret = 0;
-  unsigned int base = 1;
-
-  int i;
-  for (i=len-1;i>=0;i--) {
-    ret += arr[i] * base;
-    base = base * 256;
-  }
-
-  return ret;
-}
-
-
-unsigned int chars_to_int_little_endian(unsigned char *arr, int len) {
-  unsigned int ret = 0;
-  unsigned int base = 1;
-
-  int i;
-  for (i=0;i<len;i++) {
-    ret += arr[i] * base;
-    base = base * 256;
-  }
-
-  return ret;
-}
-
 Rtmp *rtmp_create() {
   Rtmp *rtmp = malloc(sizeof(Rtmp));
   rtmp->state = WAIT_FOR_C0;
@@ -352,15 +325,15 @@ int rtmp_process_read_chunk_data_type_0(Rtmp *rtmp, RingBuffer *buffer, RingBuff
 
   if (rtmp->packet_length == 0) {
     int i;
-    for(i=0;i<rtmp->chunk_write_to;i++)
-      printf("%c", rtmp->message[i]);
+    for (i=0;i<rtmp->chunk_write_to;i++) {
+      printf("%X ", rtmp->message[i]);
+    }
+
     printf("\n");
-    // printf("Message: msg_type=%u, payload_len=%u, timestamp=%u, stream_id=%u\n",
-    //         chars_to_int(rtmp->message, 1),
-    //         chars_to_int(rtmp->message + 1, 3),
-    //         chars_to_int(rtmp->message + 4, 4),
-    //         chars_to_int(rtmp->message + 8, 3)
-    //       );
+
+    amf0_parse(rtmp->message, 0, rtmp->chunk_write_to);
+    free(rtmp->message);
+    rtmp->message = NULL;
   }
 
   return 1;

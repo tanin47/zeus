@@ -4,6 +4,8 @@
 #include <lcthw/ringbuffer.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <basic.h>
+#include <amf0.h>
 
 typedef enum { 
   UNRECOGNIZED_STATE,
@@ -39,9 +41,6 @@ typedef struct {
 
   unsigned char *message;
 } Rtmp;
-
-unsigned int chars_to_int(unsigned char *arr, int len);
-unsigned int chars_to_int_little_endian(unsigned char *arr, int len);
 
 Rtmp *rtmp_create();
 void rtmp_destroy(Rtmp *rtmp);
