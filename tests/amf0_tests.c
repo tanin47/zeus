@@ -281,6 +281,8 @@ int test_serialize_real_response_message() {
     printf("%02x ", buffer[i]);
   }
   printf("\n\n\n");
+
+  amf0_destroy_response_message(msg);
 }
 
 int test_deserialize_real_response_message()

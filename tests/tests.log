@@ -1,5 +1,5 @@
-DEBUG tests/amf0_tests.c:330: ----- RUNNING: ./tests/amf0_tests
-DEBUG tests/amf0_tests.c:325: 
+DEBUG tests/amf0_tests.c:332: ----- RUNNING: ./tests/amf0_tests
+DEBUG tests/amf0_tests.c:327: 
 ----- test_functions
 DEBUG tests/darray_tests.c:123: ----- RUNNING: ./tests/darray_tests
 DEBUG tests/darray_tests.c:111: 

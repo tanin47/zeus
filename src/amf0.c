@@ -10,9 +10,9 @@ Amf0InvokeMessage *amf0_create_invoke_message() {
 }
 
 void amf0_destroy_invoke_message(Amf0InvokeMessage *msg) {
-  if (msg->command != NULL) bdestroy(msg->command);
+  bdestroy(msg->command);
   msg->transaction_id = 0.0;
-  if (msg->arguments != NULL) Hashmap_destroy(msg->arguments);
+  amf0_destroy_object(msg->arguments);
 }
 
 Amf0ResponseMessage *amf0_create_response_message() {
@@ -26,10 +26,64 @@ Amf0ResponseMessage *amf0_create_response_message() {
 }
 
 void amf0_destroy_response_message(Amf0ResponseMessage *msg) {
-  if (msg->command != NULL) bdestroy(msg->command);
+  bdestroy(msg->command);
   msg->transaction_id = 0.0;
-  if (msg->properties != NULL) Hashmap_destroy(msg->properties);
-  if (msg->information != NULL) Hashmap_destroy(msg->information);
+  amf0_destroy_object(msg->properties);
+  amf0_destroy_object(msg->information);
+}
+
+void amf0_destroy_object(Hashmap *object) {
+  int i = 0;
+  int j = 0;
+  int rc = 0;
+
+  for(i = 0; i < DArray_count(object->buckets); i++) {
+      DArray *bucket = DArray_get(object->buckets, i);
+      if(bucket) {
+          for(j = 0; j < DArray_count(bucket); j++) {
+              HashmapNode *node = DArray_get(bucket, j);
+
+              free(node->key);
+              amf0_destroy_object_value(node->data);
+
+              if(rc != 0) return rc;
+          }
+      }
+  }
+
+  Hashmap_destroy(object);
+}
+
+void amf0_destroy_object_value(Amf0ObjectValue *object) {
+  if (object->type == AMF0_STRING) bdestroy(object->string);
+  else if (object->type == AMF0_OBJECT) amf0_destroy_object(object->object);
+  else if (object->type == AMF0_TYPED_OBJECT) amf0_destroy_typed_object(object->typed_object);
+  else if (object->type == AMF0_ECMA_ARRAY) amf0_destroy_ecma_array(object->ecma_array);
+  else if (object->type == AMF0_STRICT_ARRAY) amf0_destroy_strict_array(object->strict_array);
+  else if (object->type == AMF0_XML_DOCUMENT) bdestroy(object->xml_document);
+
+  free(object);
+}
+
+void amf0_destroy_typed_object(Amf0TypedObject *object) {
+  amf0_destroy_object(object->object);
+  bdestroy(object->class_name);
+
+  free(object);
+}
+
+void amf0_destroy_ecma_array(Hashmap *emca_array) {
+  amf0_destroy_object(emca_array);
+}
+
+void amf0_destroy_strict_array(Amf0StrictArray *strict_array) {
+  int i;
+  for (i=0;i<strict_array->length;i++) {
+    amf0_destroy_object_value(strict_array->data[i]);
+  }
+
+  free(strict_array->data);
+  free(strict_array);
 }
 
 int amf0_serialize_invoke_message(unsigned char *output, Amf0InvokeMessage *msg) {
@@ -89,7 +143,7 @@ int amf0_deserialize_response_message(Amf0ResponseMessage *msg, unsigned char *i
 
 
 int amf0_serialize_number(unsigned char *output, double number) {
-  output[0] = 0x00;
+  output[0] = AMF0_NUMBER;
   memcpy(output + 1, &number, 8);
 
   int i;
@@ -99,9 +153,7 @@ int amf0_serialize_number(unsigned char *output, double number) {
     output[8-i] = b;
   }
 
-  return 9;  
-error:
-  return -1;
+  return 9;
 }
 
 int amf0_deserialize_number(double *number, unsigned char *input) {
@@ -110,13 +162,11 @@ int amf0_deserialize_number(double *number, unsigned char *input) {
     memcpy((char *)number + i, input + 7 - i, 1);
   }
 
-  return 8;  
-error:
-  return -1;
+  return 8;
 }
 
 int amf0_serialize_boolean(unsigned char *output, int boolean) {
-  output[0] = 0x01;
+  output[0] = AMF0_BOOLEAN;
   output[1] = (boolean == 0) ? 0x00 : 0x01;
 
   return 2;  
@@ -134,7 +184,7 @@ error:
 
 int amf0_serialize_string(unsigned char *output, bstring str) {
   int i = 0;
-  output[i++] = 0x02;
+  output[i++] = AMF0_STRING;
 
   i += amf0_serialize_string_literal(output + i, str, 2);
 
@@ -183,7 +233,7 @@ error:
 
 int amf0_serialize_object(unsigned char *output, Hashmap *object) {
   int count = 0;
-  output[count++] = 0x03;
+  output[count++] = AMF0_OBJECT;
 
   count += amf0_serialize_object_content(output + count, object);
 
@@ -249,11 +299,11 @@ int amf0_serialize_object_value(unsigned char *output, Amf0ObjectValue *val) {
     return amf0_serialize_string(output, val->string);
   } else if (val->type == AMF0_OBJECT) {
     return amf0_serialize_object(output, val->object);
+  } else if (val->type == AMF0_MOVIE_CLIP) {
+    printf("Serialize movie-clip is not supported\n");
+    exit(1);
   } else if (val->type == AMF0_NULL) {
     return amf0_serialize_null(output);
-  } else if (val->type == AMF0_MOVIE_CLIP) {
-    printf("movie-clip is not supported\n");
-    exit(1);
   } else if (val->type == AMF0_UNDEFINED) {
     return amf0_serialize_undefined(output);
   } else if (val->type == AMF0_REFERENCE) {
@@ -286,61 +336,46 @@ int amf0_deserialize_object_value(Amf0ObjectValue *output, unsigned char *input)
   unsigned int start_data = input + 1;
   int count = 0;
 
-  //printf("%02x ", input[0]);
+  printf("%02x ", input[0]);
+  output->type = input[0];
 
-  if (input[0] == 0x00) {
-    output->type = AMF0_NUMBER;
+  if (output->type == AMF0_NUMBER) {
     count = amf0_deserialize_number(&(output->number), start_data);
-  } else if (input[0] == 0x01) {
-    output->type = AMF0_BOOLEAN;
+  } else if (output->type == AMF0_BOOLEAN) {
     count = amf0_deserialize_boolean(&(output->boolean), start_data);
-  } else if (input[0] == 0x02) {
-    output->type = AMF0_STRING;
+  } else if (output->type == AMF0_STRING) {
     count = amf0_deserialize_string(&(output->string), start_data);
-  } else if (input[0] == 0x03) {
-    output->type = AMF0_OBJECT;
+  } else if (output->type == AMF0_OBJECT) {
     output->object = Hashmap_create(NULL, NULL);
     count = amf0_deserialize_object(output->object, start_data);
-  } else if (input[0] == 0x04) {
-    output->type = AMF0_NULL;
-    count = amf0_deserialize_null(start_data);
-  } else if (input[0] == 0x05) {
-    output->type = AMF0_MOVIE_CLIP;
-    printf("movie-clip is not supported\n");
+  } else if (output->type == AMF0_MOVIE_CLIP) {
+    printf("Deserialize movie-clip is not supported\n");
     exit(1);
-  } else if (input[0] == 0x06) {
-    output->type = AMF0_UNDEFINED;
+  } else if (output->type == AMF0_NULL) {
+    count = amf0_deserialize_null(start_data);
+  } else if (output->type == AMF0_UNDEFINED) {
     count = amf0_deserialize_undefined(start_data);
-  } else if (input[0] == 0x07) {
-    output->type = AMF0_REFERENCE;
+  } else if (output->type == AMF0_REFERENCE) {
     count = amf0_deserialize_reference(&(output->reference), start_data);
-  } else if (input[0] == 0x08) {
-    output->type = AMF0_ECMA_ARRAY;
+  } else if (output->type == AMF0_ECMA_ARRAY) {
     output->ecma_array = Hashmap_create(NULL, NULL);
     count = amf0_deserialize_ecma_array(output->ecma_array, start_data);
-  } else if (input[0] == 0x09) {
+  } else if (output->type == AMF0_OBJECT_END) {
     printf("wtf! this is object-end-marker\n");
     exit(1);
-  } else if (input[0] == 0x0A) {
-    output->type = AMF0_STRICT_ARRAY;
+  } else if (output->type == AMF0_STRICT_ARRAY) {
     count = amf0_deserialize_strict_array(&(output->strict_array), start_data);
-  } else if (input[0] == 0x0B) {
-    output->type = AMF0_DATE;
+  } else if (output->type == AMF0_DATE) {
     count = amf0_deserialize_date(&(output->date), start_data);
-  } else if (input[0] == 0x0C) {
-    output->type = AMF0_LONG_STRING;
+  } else if (output->type == AMF0_LONG_STRING) {
     count = amf0_deserialize_long_string(&(output->string), start_data);
-  } else if (input[0] == 0x0D) {
-    output->type = AMF0_UNSUPPORTED;
+  } else if (output->type == AMF0_UNSUPPORTED) {
     count = amf0_deserialize_unsupported(start_data);
-  } else if (input[0] == 0x0E) {
-    output->type = AMF0_RECORDSET;
+  } else if (output->type == AMF0_RECORDSET) {
     count = amf0_deserialize_record_set(start_data);
-  } else if (input[0] == 0x0F) {
-    output->type = AMF0_XML_DOCUMENT;
+  } else if (output->type == AMF0_XML_DOCUMENT) {
     count = amf0_deserialize_xml_document(&(output->xml_document), start_data);
-  } else if (input[0] == 0x10) {
-    output->type = AMF0_TYPED_OBJECT;
+  } else if (output->type == AMF0_TYPED_OBJECT) {
     output->typed_object = malloc(sizeof(Amf0TypedObject));
     count = amf0_deserialize_typed_object(output->typed_object, start_data);
   } else {
@@ -384,10 +419,10 @@ void print_amf0_object_value(Amf0ObjectValue *val) {
     printf("%s", bdata(val->string));
   } else if (val->type == AMF0_OBJECT) {
     print_amf0_object(val->object);
-  } else if (val->type == AMF0_NULL) {
-    printf("<null>");
   } else if (val->type == AMF0_MOVIE_CLIP) {
     printf("<movie_clip>");
+  } else if (val->type == AMF0_NULL) {
+    printf("<null>");
   } else if (val->type == AMF0_UNDEFINED) {
     printf("<undefined>");
   } else if (val->type == AMF0_REFERENCE) {
@@ -417,7 +452,7 @@ void print_amf0_object_value(Amf0ObjectValue *val) {
 
 
 int amf0_serialize_null(unsigned char *output) {
-  output[0] = 0x04;
+  output[0] = AMF0_NULL;
   return 1;
 }
 
@@ -427,7 +462,7 @@ int amf0_deserialize_null(unsigned char *input) {
 
 
 int amf0_serialize_undefined(unsigned char *output) {
-  output[0] = 0x06;
+  output[0] = AMF0_UNDEFINED;
   return 1;
 }
 
@@ -437,7 +472,7 @@ int amf0_deserialize_undefined(unsigned char *input) {
 
 
 int amf0_serialize_reference(unsigned char *output, unsigned short reference) {
-  output[0] = 0x07;
+  output[0] = AMF0_REFERENCE;
   output[1] = ((reference & 0xFF00) >> 8);
   output[2] = (reference & 0x00FF);
 
@@ -451,7 +486,7 @@ int amf0_deserialize_reference(unsigned short *reference, unsigned char *input) 
 
 int amf0_serialize_ecma_array(unsigned char *output, Hashmap *array) {
   int count = 0;
-  output[count++] = 0x08;
+  output[count++] = AMF0_ECMA_ARRAY;
 
   // length
   output[count++] = 0x00;
@@ -512,7 +547,7 @@ void print_amf0_ecma_array(Hashmap *array) {
 int amf0_serialize_strict_array(unsigned char *output, Amf0StrictArray *array) {
   int count = 0;
 
-  output[count++] = 0x0A;
+  output[count++] = AMF0_STRICT_ARRAY;
 
   int_to_byte_array(array->length, output, count, count + 3);
   count += 4;
@@ -555,7 +590,7 @@ void print_amf0_strict_array(Amf0StrictArray *array) {
 }
 
 int amf0_serialize_date(unsigned char *output, double date) {
-  output[0] = 0x0B;
+  output[0] = AMF0_DATE;
   memcpy(output + 1, &date, 8);
 
   int i;
@@ -584,7 +619,7 @@ error:
 
 int amf0_serialize_long_string(unsigned char *output, bstring str) {
   int i = 0;
-  output[i++] = 0x0C;
+  output[i++] = AMF0_LONG_STRING;
 
   i += amf0_serialize_string_literal(output + i, str, 4);
 
@@ -606,7 +641,7 @@ error:
 
 
 int amf0_serialize_unsupported(unsigned char *output) {
-  output[0] = 0x0D;
+  output[0] = AMF0_UNSUPPORTED;
   return 1;
 }
 
@@ -626,7 +661,7 @@ int amf0_deserialize_record_set(unsigned char *input) {
 
 int amf0_serialize_xml_document(unsigned char *output, bstring str) {
   int i = 0;
-  output[i++] = 0x0F;
+  output[i++] = AMF0_XML_DOCUMENT;
 
   i += amf0_serialize_string_literal(output + i, str, 4);
 
@@ -648,7 +683,7 @@ error:
 
 int amf0_serialize_typed_object(unsigned char *output, Amf0TypedObject *typed_object) {
   int count = 0;
-  output[count++] = 0x10;
+  output[count++] = AMF0_TYPED_OBJECT;
 
   count += amf0_serialize_string_literal(output + count, typed_object->class_name, 2);
   count += amf0_serialize_object_content(output + count, typed_object->object);

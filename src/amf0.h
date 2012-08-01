@@ -7,8 +7,7 @@
 #include <dbg.h>
 
 typedef enum { 
-  AMF0_UNRECOGNIZED_TYPE,
-  AMF0_NUMBER,
+  AMF0_NUMBER = 0x00,
   AMF0_BOOLEAN,
   AMF0_STRING,
   AMF0_OBJECT,
@@ -54,7 +53,6 @@ struct Amf0StrictArray {
   int length;
 };
 
-
 typedef struct {
   bstring command;
   double transaction_id;
@@ -74,6 +72,12 @@ void amf0_destroy_invoke_message(Amf0InvokeMessage *msg);
 
 Amf0ResponseMessage *amf0_create_response_message();
 void amf0_destroy_response_message(Amf0ResponseMessage *msg);
+
+void amf0_destroy_object(Hashmap *object);
+void amf0_destroy_object_value(Amf0ObjectValue *object);
+void amf0_destroy_typed_object(Amf0TypedObject *object);
+void amf0_destroy_ecma_array(Hashmap *object);
+void amf0_destroy_strict_array(Amf0StrictArray *strict_array);
 
 int amf0_serialize_invoke_message(unsigned char *output, Amf0InvokeMessage *msg);
 int amf0_deserialize_invoke_message(Amf0InvokeMessage *msg, unsigned char *input);
