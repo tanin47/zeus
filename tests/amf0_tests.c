@@ -10,73 +10,104 @@ int test_serialize_and_deserialize_invoke_message() {
 
   Amf0ObjectValue *val, *sub_val;
 
-  // val = malloc(sizeof(Amf0ObjectValue));
-  // val->type = AMF0_NUMBER;
-  // val->number = 1.0;
-  // Hashmap_set(msg->arguments, bfromcstr("NumberKey"), val);
+  val = malloc(sizeof(Amf0ObjectValue));
+  val->type = AMF0_NUMBER;
+  val->number = 1.0;
+  Hashmap_set(msg->arguments, bfromcstr("NumberKey"), val);
 
-  // val = malloc(sizeof(Amf0ObjectValue));
-  // val->type = AMF0_BOOLEAN;
-  // val->boolean = 1;
-  // Hashmap_set(msg->arguments, bfromcstr("BooleanKey"), val);
+  val = malloc(sizeof(Amf0ObjectValue));
+  val->type = AMF0_BOOLEAN;
+  val->boolean = 1;
+  Hashmap_set(msg->arguments, bfromcstr("BooleanKey"), val);
 
-  // val = malloc(sizeof(Amf0ObjectValue));
-  // val->type = AMF0_STRING;
-  // val->string = bfromcstr("Value");
-  // Hashmap_set(msg->arguments, bfromcstr("StringKey"), val);
+  val = malloc(sizeof(Amf0ObjectValue));
+  val->type = AMF0_STRING;
+  val->string = bfromcstr("Value");
+  Hashmap_set(msg->arguments, bfromcstr("StringKey"), val);
 
+  val = malloc(sizeof(Amf0ObjectValue));
+  val->type = AMF0_OBJECT;
+  val->object = Hashmap_create(NULL, NULL);
 
-  // val = malloc(sizeof(Amf0ObjectValue));
-  // val->type = AMF0_OBJECT;
-  // val->object = Hashmap_create(NULL, NULL);
+    sub_val = malloc(sizeof(Amf0ObjectValue));
+    sub_val->type = AMF0_STRING;
+    sub_val->string = bfromcstr("SomeValueInObject");
 
-  // sub_val = malloc(sizeof(Amf0ObjectValue));
-  // sub_val->type = AMF0_STRING;
-  // sub_val->string = bfromcstr("SomeValueInObject");
+    Hashmap_set(val->object, bfromcstr("NothingInObject"), sub_val);
+  Hashmap_set(msg->arguments, bfromcstr("ObjectKey"), val);
 
-  // Hashmap_set(val->object, bfromcstr("NothingInObject"), sub_val);
-  // Hashmap_set(msg->arguments, bfromcstr("ObjectKey"), val);
+  val = malloc(sizeof(Amf0ObjectValue));
+  val->type = AMF0_NULL;
+  Hashmap_set(msg->arguments, bfromcstr("NullKey"), val);
 
-  // val = malloc(sizeof(Amf0ObjectValue));
-  // val->type = AMF0_NULL;
-  // Hashmap_set(msg->arguments, bfromcstr("NullKey"), val);
+  val = malloc(sizeof(Amf0ObjectValue));
+  val->type = AMF0_UNDEFINED;
+  Hashmap_set(msg->arguments, bfromcstr("UndefinedKey"), val);
 
-  // val = malloc(sizeof(Amf0ObjectValue));
-  // val->type = AMF0_UNDEFINED;
-  // Hashmap_set(msg->arguments, bfromcstr("UndefinedKey"), val);
+  val = malloc(sizeof(Amf0ObjectValue));
+  val->type = AMF0_REFERENCE;
+  val->reference = 0x1234;
+  Hashmap_set(msg->arguments, bfromcstr("ReferencedKey"), val);
 
-  // val = malloc(sizeof(Amf0ObjectValue));
-  // val->type = AMF0_REFERENCE;
-  // val->reference = 0x1234;
-  // Hashmap_set(msg->arguments, bfromcstr("ReferencedKey"), val);
+  val = malloc(sizeof(Amf0ObjectValue));
+  val->type = AMF0_ECMA_ARRAY;
+  val->ecma_array = Hashmap_create(NULL, NULL);
 
-  // val = malloc(sizeof(Amf0ObjectValue));
-  // val->type = AMF0_ECMA_ARRAY;
-  // val->ecma_array = Hashmap_create(NULL, NULL);
+    sub_val = malloc(sizeof(Amf0ObjectValue));
+    sub_val->type = AMF0_STRING;
+    sub_val->string = bfromcstr("SomeValue");
 
-  // sub_val = malloc(sizeof(Amf0ObjectValue));
-  // sub_val->type = AMF0_STRING;
-  // sub_val->string = bfromcstr("SomeValue");
-
-  // Hashmap_set(val->ecma_array, bfromcstr("Nothing"), sub_val);
-  // Hashmap_set(msg->arguments, bfromcstr("EcmaArrayKey"), val);
+    Hashmap_set(val->ecma_array, bfromcstr("Nothing"), sub_val);
+  Hashmap_set(msg->arguments, bfromcstr("EcmaArrayKey"), val);
 
   val = malloc(sizeof(Amf0ObjectValue));
   val->type = AMF0_STRICT_ARRAY;
   val->strict_array = malloc(sizeof(Amf0StrictArray));
 
-  val->strict_array->length = 2;
-  val->strict_array->data = calloc(2, sizeof(Amf0ObjectValue *));
+    val->strict_array->length = 2;
+    val->strict_array->data = calloc(2, sizeof(Amf0ObjectValue *));
 
-  val->strict_array->data[0] = malloc(sizeof(Amf0ObjectValue));
-  val->strict_array->data[0]->type = AMF0_STRING;
-  val->strict_array->data[0]->string = bfromcstr("FirstElement");
+    val->strict_array->data[0] = malloc(sizeof(Amf0ObjectValue));
+    val->strict_array->data[0]->type = AMF0_STRING;
+    val->strict_array->data[0]->string = bfromcstr("FirstElement");
 
-  val->strict_array->data[1] = malloc(sizeof(Amf0ObjectValue));
-  val->strict_array->data[1]->type = AMF0_NUMBER;
-  val->strict_array->data[1]->number = 1.0;
+    val->strict_array->data[1] = malloc(sizeof(Amf0ObjectValue));
+    val->strict_array->data[1]->type = AMF0_NUMBER;
+    val->strict_array->data[1]->number = 1.0;
   
   Hashmap_set(msg->arguments, bfromcstr("StrictArrayKey"), val);
+
+  val = malloc(sizeof(Amf0ObjectValue));
+  val->type = AMF0_DATE;
+  val->date = 1234.5678;
+  Hashmap_set(msg->arguments, bfromcstr("DateKey"), val);
+
+  val = malloc(sizeof(Amf0ObjectValue));
+  val->type = AMF0_LONG_STRING;
+  val->string = bfromcstr("LongValue");
+  Hashmap_set(msg->arguments, bfromcstr("LongStringKey"), val);
+
+  val = malloc(sizeof(Amf0ObjectValue));
+  val->type = AMF0_UNSUPPORTED;
+  Hashmap_set(msg->arguments, bfromcstr("UnsupportedKey"), val);
+
+  val = malloc(sizeof(Amf0ObjectValue));
+  val->type = AMF0_XML_DOCUMENT;
+  val->xml_document = bfromcstr("<xml>");
+  Hashmap_set(msg->arguments, bfromcstr("XmlKey"), val);
+
+  val = malloc(sizeof(Amf0ObjectValue));
+  val->type = AMF0_TYPED_OBJECT;
+  val->typed_object = malloc(sizeof(Amf0TypedObject));
+  val->typed_object->class_name = bfromcstr("SomeClassName");
+  val->typed_object->object = Hashmap_create(NULL, NULL);
+
+    sub_val = malloc(sizeof(Amf0ObjectValue));
+    sub_val->type = AMF0_STRING;
+    sub_val->string = bfromcstr("SomeValueInTypedObject");
+
+    Hashmap_set(val->typed_object->object, bfromcstr("NothingInTypedObject"), sub_val);
+  Hashmap_set(msg->arguments, bfromcstr("TypedKey"), val);
 
   unsigned char buffer[65536];
   int count = amf0_serialize_invoke_message(buffer, msg);
@@ -197,8 +228,8 @@ int test_serialize_real_invoke_message() {
 
 char *test_functions()
 {
-  mu_assert(test_deserialize_real_invoke_message(), "test_deserialize_real_invoke_message() failed.");
-  mu_assert(test_serialize_real_invoke_message(), "test_serialize_real_invoke_message() failed.");
+  // mu_assert(test_deserialize_real_invoke_message(), "test_deserialize_real_invoke_message() failed.");
+  // mu_assert(test_serialize_real_invoke_message(), "test_serialize_real_invoke_message() failed.");
   mu_assert(test_serialize_and_deserialize_invoke_message(), "test_serialize_and_deserialize_invoke_message() failed.");
 
   return NULL;
