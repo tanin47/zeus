@@ -36,6 +36,8 @@ int rtmp_multiplex(Rtmp *rtmp, RingBuffer *buffer, RingBuffer *write_buffer) {
       retVal = rtmp_process_read_chunk_extended_timestamp(rtmp, buffer, write_buffer);
     } else if (rtmp->state == READ_CHUNK_DATA) {
       retVal = rtmp_process_read_chunk_data(rtmp, buffer, write_buffer);
+    } else if (rtmp->state == READ_NOTHING) {
+      retVal = rtmp_process_read_nothing(rtmp, buffer, write_buffer);
     } else {
       return -1;
     }
@@ -324,16 +326,121 @@ int rtmp_process_read_chunk_data_type_0(Rtmp *rtmp, RingBuffer *buffer, RingBuff
   rtmp->state = READ_CHUNK_TYPE;
 
   if (rtmp->packet_length == 0) {
-    int i;
-    for (i=0;i<rtmp->chunk_write_to;i++) {
-      printf("%X ", rtmp->message[i]);
-    }
+    Amf0InvokeMessage *invoke = amf0_create_invoke_message();
+    amf0_deserialize_invoke_message(invoke, rtmp->message);
 
+    printf("Command: %s\n", bdata(invoke->command));
+    printf("Transaction ID: %f\n", invoke->transaction_id);
+    printf("Arguments:\n");
+    print_amf0_object(invoke->arguments);
+    printf("\n");
+    
+    amf0_destroy_invoke_message(invoke);
+
+    Amf0ResponseMessage *msg = amf0_create_response_message();
+
+    msg->command = bfromcstr("_result");
+    msg->transaction_id = 1.0;
+    msg->properties = Hashmap_create(NULL, NULL);
+    msg->information = Hashmap_create(NULL, NULL);
+
+    Amf0ObjectValue *val, *sub_val;
+
+    val = malloc(sizeof(Amf0ObjectValue));
+    val->type = AMF0_STRING;
+    val->string = bfromcstr("FMS/3,5,5,2004");
+    Hashmap_set(msg->properties, bfromcstr("fmsVer"), val);
+
+    val = malloc(sizeof(Amf0ObjectValue));
+    val->type = AMF0_NUMBER;
+    val->number = 239.000000;
+    Hashmap_set(msg->properties, bfromcstr("capabilities"), val);
+
+    val = malloc(sizeof(Amf0ObjectValue));
+    val->type = AMF0_NUMBER;
+    val->number = 1.0;
+    Hashmap_set(msg->properties, bfromcstr("mode"), val);
+
+
+    val = malloc(sizeof(Amf0ObjectValue));
+    val->type = AMF0_STRING;
+    val->string = bfromcstr("status");
+    Hashmap_set(msg->information, bfromcstr("level"), val);
+
+    val = malloc(sizeof(Amf0ObjectValue));
+    val->type = AMF0_STRING;
+    val->string = bfromcstr("NetConnection.Connect.Success");
+    Hashmap_set(msg->information, bfromcstr("code"), val);
+
+    val = malloc(sizeof(Amf0ObjectValue));
+    val->type = AMF0_STRING;
+    val->string = bfromcstr("Connection succeeded");
+    Hashmap_set(msg->information, bfromcstr("description"), val);
+
+    val = malloc(sizeof(Amf0ObjectValue));
+    val->type = AMF0_ECMA_ARRAY;
+    val->ecma_array = Hashmap_create(NULL, NULL);
+
+      sub_val = malloc(sizeof(Amf0ObjectValue));
+      sub_val->type = AMF0_STRING;
+      sub_val->string = bfromcstr("zeus.0.0.1.tanin");
+
+      Hashmap_set(val->ecma_array, bfromcstr("version"), sub_val);
+    Hashmap_set(msg->information, bfromcstr("data"), val);
+
+    val = malloc(sizeof(Amf0ObjectValue));
+    val->type = AMF0_NUMBER;
+    val->number = 1584259571.0;
+    Hashmap_set(msg->information, bfromcstr("clientId"), val);
+
+    val = malloc(sizeof(Amf0ObjectValue));
+    val->type = AMF0_NUMBER;
+    val->number = 0.0;
+    Hashmap_set(msg->information, bfromcstr("objectEncoding"), val);
+
+    printf("Command: %s\n", bdata(msg->command));
+    printf("Transaction ID: %f\n", msg->transaction_id);
+    printf("Properties:\n");
+    print_amf0_object(msg->properties);
+    printf("Information:\n");
+    print_amf0_object(msg->information);
     printf("\n");
 
-    amf0_parse(rtmp->message, 0, rtmp->chunk_write_to);
-    free(rtmp->message);
-    rtmp->message = NULL;
+    unsigned char write[65536];
+    int count = amf0_serialize_response_message(write, msg);
+    printf("count=%d\n", count);
+
+    amf0_destroy_response_message(msg);
+
+    unsigned char header[12];
+    header[0] = 0x03;
+
+    header[1] = 0x00;
+    header[2] = 0x00;
+    header[3] = 0x00;
+
+    // length
+    int_to_byte_array(count, header, 4, 3);
+    // printf("%x %x %x\n", header[4], header[5], header[6]);
+
+    header[7] = 0x14;
+
+    header[8] = 0x00;
+    header[9] = 0x00;  
+    header[10] = 0x00;
+    header[11] = 0x00;
+
+    RingBuffer_write(write_buffer, header, 12);
+    RingBuffer_write(write_buffer, write, 128);
+
+    unsigned char chunk_header = 0b11000011;
+    RingBuffer_write(write_buffer, &chunk_header, 1);
+    RingBuffer_write(write_buffer, write + 128, 128);
+
+    RingBuffer_write(write_buffer, &chunk_header, 1);
+    RingBuffer_write(write_buffer, write + 128 + 128, count - 128 - 128);
+
+    rtmp->state = READ_NOTHING;
   }
 
   return 1;
@@ -349,4 +456,21 @@ int rtmp_process_read_chunk_data_type_2(Rtmp *rtmp, RingBuffer *buffer, RingBuff
 
 int rtmp_process_read_chunk_data_type_3(Rtmp *rtmp, RingBuffer *buffer, RingBuffer *write_buffer) {
   return 0;
+}
+
+int rtmp_process_read_nothing(Rtmp *rtmp, RingBuffer *buffer, RingBuffer *write_buffer) {
+  if (RingBuffer_available_data(buffer) == 0) return 0;
+
+  int length = RingBuffer_available_data(buffer);
+
+  unsigned char data[length];
+  RingBuffer_read(buffer, data, length);
+
+  int i;
+  for (i=0;i<length;i++) {
+    printf("0x%02x, ", data[i]);
+  }
+  printf("\n");
+
+  return 1;
 }

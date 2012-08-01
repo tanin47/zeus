@@ -6,7 +6,7 @@
 unsigned int chars_to_int(unsigned char *arr, int len);
 unsigned int chars_to_int_little_endian(unsigned char *arr, int len);
 
-void int_to_byte_array(int number, unsigned char *arr, int start, int end);
+void int_to_byte_array(int number, unsigned char *arr, int start, int length);
 
 double chars_to_double(unsigned char *arr, int len);
 

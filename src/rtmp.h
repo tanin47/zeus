@@ -16,7 +16,8 @@ typedef enum {
   READ_CHUNK_EXTENDED_ID,
   READ_CHUNK_HEADER,
   READ_CHUNK_EXTENDED_TIMESTAMP,
-  READ_CHUNK_DATA
+  READ_CHUNK_DATA,
+  READ_NOTHING
 } RtmpState;
 
 typedef enum {
@@ -67,6 +68,8 @@ int rtmp_process_read_chunk_data_type_0(Rtmp *rtmp, RingBuffer *buffer, RingBuff
 int rtmp_process_read_chunk_data_type_1(Rtmp *rtmp, RingBuffer *buffer, RingBuffer *write_buffer);
 int rtmp_process_read_chunk_data_type_2(Rtmp *rtmp, RingBuffer *buffer, RingBuffer *write_buffer);
 int rtmp_process_read_chunk_data_type_3(Rtmp *rtmp, RingBuffer *buffer, RingBuffer *write_buffer);
+
+int rtmp_process_read_nothing(Rtmp *rtmp, RingBuffer *buffer, RingBuffer *write_buffer);
 
 
 #endif

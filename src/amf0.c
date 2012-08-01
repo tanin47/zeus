@@ -33,6 +33,8 @@ void amf0_destroy_response_message(Amf0ResponseMessage *msg) {
 }
 
 void amf0_destroy_object(Hashmap *object) {
+  if (object == NULL) return;
+
   int i = 0;
   int j = 0;
 
@@ -103,8 +105,13 @@ int amf0_deserialize_invoke_message(Amf0InvokeMessage *msg, unsigned char *input
   input++;
   input += amf0_deserialize_number(&(msg->transaction_id), input);
 
-  input++;
-  input += amf0_deserialize_object(&(msg->arguments), input);
+  if (input[0] == AMF0_NULL) {
+    msg->arguments = NULL;
+    input++;
+  } else {
+    input++;
+    input += amf0_deserialize_object(&(msg->arguments), input);
+  }
 
   return (unsigned int)input - start;
 }
@@ -130,11 +137,21 @@ int amf0_deserialize_response_message(Amf0ResponseMessage *msg, unsigned char *i
   input++;
   input += amf0_deserialize_number(&(msg->transaction_id), input);
 
-  input++;
-  input += amf0_deserialize_object(&(msg->properties), input);
+  if (input[0] == AMF0_NULL) {
+    msg->properties = NULL;
+    input++;
+  } else {
+    input++;
+    input += amf0_deserialize_object(&(msg->properties), input);
+  }
 
-  input++;
-  input += amf0_deserialize_object(&(msg->information), input);
+  if (input[0] == AMF0_NULL) {
+    msg->information = NULL;
+    input++;
+  } else {
+    input++;
+    input += amf0_deserialize_object(&(msg->information), input);
+  }
 
   return (unsigned int)input - start;
 }
@@ -219,6 +236,12 @@ int amf0_deserialize_string_literal(bstring *output, unsigned char *input, int l
 
 int amf0_serialize_object(unsigned char *output, Hashmap *object) {
   int count = 0;
+  
+  if (object == NULL) {
+    output[0] = AMF0_NULL;
+    return 1;
+  }
+
   output[count++] = AMF0_OBJECT;
 
   count += amf0_serialize_object_content(output + count, object);
@@ -315,7 +338,7 @@ int amf0_deserialize_object_value(Amf0ObjectValue **output_pointer, unsigned cha
   unsigned char *start_data = (unsigned char *)((unsigned int)input + 1);
   int count = 0;
 
-  printf("%02x ", input[0]);
+  //printf("%02x ", input[0]);
 
   *output_pointer = malloc(sizeof(Amf0ObjectValue));
   Amf0ObjectValue *output = *output_pointer;
@@ -537,7 +560,7 @@ int amf0_serialize_strict_array(unsigned char *output, Amf0StrictArray *array) {
 
   output[count++] = AMF0_STRICT_ARRAY;
 
-  int_to_byte_array(array->length, output, count, count + 3);
+  int_to_byte_array(array->length, output, count, 4);
   count += 4;
 
   int i;

@@ -28,10 +28,10 @@ unsigned int chars_to_int_little_endian(unsigned char *arr, int len) {
 }
 
 
-void int_to_byte_array(int number, unsigned char *arr, int start, int end) {
+void int_to_byte_array(int number, unsigned char *arr, int start, int length) {
   int i;
-  for (i=end + start - 1;i>=start;i--) {
-    arr[i] = number & 0xFF;
+  for (i=length + start - 1;i>=start;i--) {
+    arr[i] = (unsigned char)(number & 0xFF);
     number = number >> 8;
   }
 }

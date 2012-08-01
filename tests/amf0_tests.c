@@ -137,6 +137,40 @@ int test_serialize_and_deserialize_invoke_message() {
   return 1;
 }
 
+int test_serialize_and_deserialize_invoke_message_with_null_argument() {
+  Amf0InvokeMessage *msg = amf0_create_invoke_message();
+
+  msg->command = bfromcstr("Hello");
+  msg->transaction_id = 1.0;
+  msg->arguments = NULL;
+
+  unsigned char buffer[65536];
+  int count = amf0_serialize_invoke_message(buffer, msg);
+  
+  printf("length=%d\n", count);
+  int i;
+  for (i=0;i<count;i++) {
+    printf("%02x ", buffer[i]);
+  }
+  printf("\n\n\n");
+
+  amf0_destroy_invoke_message(msg);
+
+  msg = amf0_create_invoke_message();
+  amf0_deserialize_invoke_message(msg, buffer);
+
+  printf("Deserialization\n");
+  printf("Command: %s\n", bdata(msg->command));
+  printf("Transaction ID: %f\n", msg->transaction_id);
+  printf("Arguments: %u\n", msg->arguments);
+  if (msg->arguments == NULL) printf("msg->arguments is null.\n");
+  printf("\n");
+
+  amf0_destroy_invoke_message(msg);
+
+  return 1;
+}
+
 int test_deserialize_real_invoke_message()
 {
   unsigned char input[] = {
@@ -315,6 +349,7 @@ char *test_functions()
   mu_assert(test_serialize_real_response_message(), "test_serialize_real_response_message() failed.");
   mu_assert(test_deserialize_real_response_message(), "test_deserialize_real_response_message() failed.");
   mu_assert(test_serialize_and_deserialize_invoke_message(), "test_serialize_and_deserialize_invoke_message() failed.");
+  mu_assert(test_serialize_and_deserialize_invoke_message_with_null_argument(), "test_serialize_and_deserialize_invoke_message_with_null_argument() failed.");
 
   return NULL;
 }
