@@ -7,6 +7,7 @@ int test_serialize_and_deserialize_invoke_message() {
 
   msg->command = bfromcstr("Hello");
   msg->transaction_id = 1.0;
+  msg->arguments = Hashmap_create(NULL, NULL);
 
   Amf0ObjectValue *val, *sub_val;
 
@@ -134,8 +135,6 @@ int test_serialize_and_deserialize_invoke_message() {
   amf0_destroy_invoke_message(msg);
 
   return 1;
-error:
-  return 0;
 }
 
 int test_deserialize_real_invoke_message()
@@ -193,8 +192,6 @@ int test_deserialize_real_invoke_message()
   amf0_destroy_invoke_message(msg);
 
   return 1;
-error:
-  return 0;
 }
 
 int test_serialize_real_response_message() {
@@ -215,6 +212,8 @@ int test_serialize_real_response_message() {
 
   msg->command = bfromcstr("_result");
   msg->transaction_id = 1.0;
+  msg->properties = Hashmap_create(NULL, NULL);
+  msg->information = Hashmap_create(NULL, NULL);
 
   Amf0ObjectValue *val, *sub_val;
 
@@ -283,6 +282,8 @@ int test_serialize_real_response_message() {
   printf("\n\n\n");
 
   amf0_destroy_response_message(msg);
+
+  return 1;
 }
 
 int test_deserialize_real_response_message()
@@ -306,8 +307,6 @@ int test_deserialize_real_response_message()
   amf0_destroy_response_message(msg);
 
   return 1;
-error:
-  return 0;
 }
 
 char *test_functions()

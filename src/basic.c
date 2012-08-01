@@ -1,13 +1,13 @@
 #include <basic.h>
+#include <string.h>
 
 unsigned int chars_to_int(unsigned char *arr, int len) {
   unsigned int ret = 0;
-  unsigned int base = 1;
 
   int i;
-  for (i=len-1;i>=0;i--) {
-    ret += arr[i] * base;
-    base = base * 256;
+  for (i=0;i<len;i++) {
+    ret = ret << 8;
+    ret |= arr[i];
   }
 
   return ret;
@@ -19,9 +19,9 @@ unsigned int chars_to_int_little_endian(unsigned char *arr, int len) {
   unsigned int base = 1;
 
   int i;
-  for (i=0;i<len;i++) {
-    ret += arr[i] * base;
-    base = base * 256;
+  for (i=len-1;i>=0;i--) {
+    ret = ret << 8;
+    ret |= arr[i];
   }
 
   return ret;

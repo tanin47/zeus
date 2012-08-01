@@ -98,12 +98,15 @@ int amf0_deserialize_string_literal(bstring *output, unsigned char *input, int l
 
 int amf0_serialize_object(unsigned char *output, Hashmap *object);
 int amf0_serialize_object_content(unsigned char *output, Hashmap *object);
-int amf0_deserialize_object(Hashmap *output, unsigned char *input);
+int amf0_deserialize_object(Hashmap **output_pointer, unsigned char *input);
 int amf0_serialize_object_value(unsigned char *output, Amf0ObjectValue *val);
-int amf0_deserialize_object_value(Amf0ObjectValue *output, unsigned char *input);
+int amf0_deserialize_object_value(Amf0ObjectValue **output_pointer, unsigned char *input);
 
 void print_amf0_object(Hashmap *object);
 void print_amf0_object_value(Amf0ObjectValue *val);
+
+int amf0_serialize_movie_clip(unsigned char *output);
+int amf0_deserialize_movie_clip(unsigned char *input);
 
 int amf0_serialize_null(unsigned char *output);
 int amf0_deserialize_null(unsigned char *input);
@@ -115,7 +118,7 @@ int amf0_serialize_reference(unsigned char *output, unsigned short reference);
 int amf0_deserialize_reference(unsigned short *reference, unsigned char *input);
 
 int amf0_serialize_ecma_array(unsigned char *output, Hashmap *array);
-int amf0_deserialize_ecma_array(Hashmap *output, unsigned char *input);
+int amf0_deserialize_ecma_array(Hashmap **output_pointer, unsigned char *input);
 
 void print_amf0_ecma_array(Hashmap *array);
 
@@ -140,7 +143,7 @@ int amf0_serialize_xml_document(unsigned char *output, bstring str);
 int amf0_deserialize_xml_document(bstring *output, unsigned char *input);
 
 int amf0_serialize_typed_object(unsigned char *output, Amf0TypedObject *object);
-int amf0_deserialize_typed_object(Amf0TypedObject *output, unsigned char *input);
+int amf0_deserialize_typed_object(Amf0TypedObject **output_pointer, unsigned char *input);
 
 void amf0_parse(unsigned char *message, int start, int msg_length);
 

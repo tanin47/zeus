@@ -13,6 +13,9 @@
   message = test(); tests_run++; if (message) return message;
 
 #define RUN_TESTS(name) int main(int argc, char *argv[]) {\
+  (void) argc; \
+  (void) argv; \
+  \
   argc = 1; \
   debug("----- RUNNING: %s", argv[0]);\
   printf("----\nRUNNING: %s\n", argv[0]);\
