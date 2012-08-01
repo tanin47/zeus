@@ -61,13 +61,25 @@ typedef struct {
   Hashmap *arguments;
 } Amf0InvokeMessage;
 
+typedef struct {
+  bstring command;
+  double transaction_id;
+  Hashmap *properties;
+  Hashmap *information;
+} Amf0ResponseMessage;
 
 
 Amf0InvokeMessage *amf0_create_invoke_message();
 void amf0_destroy_invoke_message(Amf0InvokeMessage *msg);
 
+Amf0ResponseMessage *amf0_create_response_message();
+void amf0_destroy_response_message(Amf0ResponseMessage *msg);
+
 int amf0_serialize_invoke_message(unsigned char *output, Amf0InvokeMessage *msg);
 int amf0_deserialize_invoke_message(Amf0InvokeMessage *msg, unsigned char *input);
+
+int amf0_serialize_response_message(unsigned char *output, Amf0ResponseMessage *msg);
+int amf0_deserialize_response_message(Amf0ResponseMessage *msg, unsigned char *input);
 
 int amf0_serialize_number(unsigned char *output, double number);
 int amf0_deserialize_number(double *number, unsigned char *input);

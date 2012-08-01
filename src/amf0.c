@@ -15,6 +15,23 @@ void amf0_destroy_invoke_message(Amf0InvokeMessage *msg) {
   if (msg->arguments != NULL) Hashmap_destroy(msg->arguments);
 }
 
+Amf0ResponseMessage *amf0_create_response_message() {
+  Amf0ResponseMessage *msg = malloc(sizeof(Amf0ResponseMessage));
+  msg->command = NULL;
+  msg->transaction_id = 0.0;
+  msg->properties = Hashmap_create(NULL, NULL);
+  msg->information = Hashmap_create(NULL, NULL);
+
+  return msg;
+}
+
+void amf0_destroy_response_message(Amf0ResponseMessage *msg) {
+  if (msg->command != NULL) bdestroy(msg->command);
+  msg->transaction_id = 0.0;
+  if (msg->properties != NULL) Hashmap_destroy(msg->properties);
+  if (msg->information != NULL) Hashmap_destroy(msg->information);
+}
+
 int amf0_serialize_invoke_message(unsigned char *output, Amf0InvokeMessage *msg) {
   int i = 0;
 
@@ -23,8 +40,6 @@ int amf0_serialize_invoke_message(unsigned char *output, Amf0InvokeMessage *msg)
   i += amf0_serialize_object(output + i, msg->arguments);
 
   return i;
-error:
-  return -1;
 }
 
 int amf0_deserialize_invoke_message(Amf0InvokeMessage *msg, unsigned char *input) {
@@ -39,9 +54,37 @@ int amf0_deserialize_invoke_message(Amf0InvokeMessage *msg, unsigned char *input
   input++;
   input += amf0_deserialize_object(msg->arguments, input);
 
-  return (input - start + 1);
-error:
-  return -1;
+  return input - start;
+}
+
+
+int amf0_serialize_response_message(unsigned char *output, Amf0ResponseMessage *msg) {
+  int i = 0;
+
+  i += amf0_serialize_string(output + i, msg->command);
+  i += amf0_serialize_number(output + i, msg->transaction_id);
+  i += amf0_serialize_object(output + i, msg->properties);
+  i += amf0_serialize_object(output + i, msg->information);
+
+  return i;
+}
+
+int amf0_deserialize_response_message(Amf0ResponseMessage *msg, unsigned char *input) {
+  unsigned int start = input;
+
+  input++;
+  input += amf0_deserialize_string(&(msg->command), input);
+
+  input++;
+  input += amf0_deserialize_number(&(msg->transaction_id), input);
+
+  input++;
+  input += amf0_deserialize_object(msg->properties, input);
+
+  input++;
+  input += amf0_deserialize_object(msg->information, input);
+
+  return input - start;
 }
 
 
