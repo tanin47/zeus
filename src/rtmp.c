@@ -35,6 +35,7 @@ Rtmp *rtmp_create() {
   rtmp->state = WAIT_FOR_CONNECT;
   rtmp->chunk_size = 128;
   rtmp->end = 0;
+  rtmp->file = NULL;
   return rtmp;
 }
 
@@ -371,6 +372,8 @@ int rtmp_process_read_nothing(Rtmp *rtmp, RingBuffer *buffer, RtmpOutputMessage 
 void rtmp_process_message(Rtmp *rtmp, RtmpOutputMessage *output) {
   if (rtmp->message_type == 0x14) {
     return rtmp_process_command_message(rtmp, output);
+  } else if (rtmp->message_type == 0x09) {
+    fwrite(rtmp->message, 1, rtmp->message_length, rtmp->file);
   } else if (rtmp->message_type == 0x11) {
     printf("AMF3 is not supported.\n");
     exit(1);
@@ -392,10 +395,10 @@ void rtmp_process_command_message(Rtmp *rtmp, RtmpOutputMessage *output) {
     rtmp_process_connect_message(rtmp, output);
   } else if (bstrcmp(command, &COMMAND_CREATE_STREAM) == 0) {
     rtmp_process_create_stream_message(rtmp, output);
-  } else if (bstrcmp(command, &COMMAND_CLOSE_STREAM) == 0) {
+  } else if (bstrcmp(command, &COMMAND_CLOSE_STREAM) == 0
+            || bstrcmp(command, &COMMAND_DELETE_STREAM) == 0) {
     rtmp->end = 1;
-  } else if (bstrcmp(command, &COMMAND_DELETE_STREAM) == 0) {
-    rtmp->end = 1;
+    if (rtmp->file != NULL) fclose(rtmp->file);
   } else if (bstrcmp(command, &COMMAND_PUBLISH) == 0) {
     rtmp_process_publish_message(rtmp, output);
   }
@@ -535,4 +538,6 @@ void rtmp_process_publish_message(Rtmp *rtmp, RtmpOutputMessage *output) {
 
   
   amf0_destroy_publish_message(cmd);
+
+  rtmp->file = fopen("file", "w");
 }

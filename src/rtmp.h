@@ -50,6 +50,8 @@ typedef struct {
   unsigned int message_length;
   unsigned int message_data_left;
 
+  FILE *file;
+
   int end;
 } Rtmp;
 
