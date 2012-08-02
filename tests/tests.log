@@ -43,6 +43,6 @@ DEBUG tests/hashmap_tests.c:117:
 DEBUG tests/ringbuffer_tests.c:31: ----- RUNNING: ./tests/ringbuffer_tests
 DEBUG tests/ringbuffer_tests.c:26: 
 ----- test_ringbuffer
-DEBUG tests/rtmp_tests.c:30: ----- RUNNING: ./tests/rtmp_tests
-DEBUG tests/rtmp_tests.c:25: 
+DEBUG tests/rtmp_tests.c:32: ----- RUNNING: ./tests/rtmp_tests
+DEBUG tests/rtmp_tests.c:27: 
 ----- test_enum

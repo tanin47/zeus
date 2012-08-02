@@ -12,7 +12,7 @@ RtmpOutputMessage *rtmp_create_output_message() {
 void rtmp_allocate_output_message_content(RtmpOutputMessage *output, unsigned int length) {
   output->message = malloc(sizeof(unsigned char) * length);
   output->length = length;
-  output->data_left = 0;
+  output->data_left = length;
 }
 
 void rtmp_destroy_output_message(RtmpOutputMessage *output) {
@@ -25,58 +25,53 @@ void rtmp_destroy_output_message(RtmpOutputMessage *output) {
   free(output);
 }
 
-unsigned int rtmp_output_message_start_at(RtmpOutputMessage *output) {
+unsigned char *rtmp_output_message_start_at(RtmpOutputMessage *output) {
   return output->message + output->length - output->data_left;
 }
 
 Rtmp *rtmp_create() {
   Rtmp *rtmp = malloc(sizeof(Rtmp));
-  rtmp->state = WAIT_FOR_C0;
+  rtmp->chunk_state = WAIT_FOR_C0;
+  rtmp->state = WAIT_FOR_CONNECT;
   rtmp->chunk_size = 128;
-  rtmp->c1 = NULL;
   return rtmp;
 }
 
 void rtmp_destroy(Rtmp *rtmp) {
-  if (rtmp->c1 != NULL) free(rtmp->c1);
   free(rtmp);
 }
 
 int rtmp_multiplex(Rtmp *rtmp, RingBuffer *buffer, RtmpOutputMessage *output) {
-  while (RingBuffer_available_data(buffer) > 0) {
-    printf("----------------------\n");
-    printf("Available data: %d, State=%d\n", RingBuffer_available_data(buffer), rtmp->state);
+  printf("----------------------\n");
+  printf("Available data: %d, State=%d\n", RingBuffer_available_data(buffer), rtmp->chunk_state);
 
-    int retVal = -1;
+  int retVal = -1;
 
-    if (rtmp->state == WAIT_FOR_C0) {
-      retVal = rtmp_process_c0(rtmp, buffer, output);
-    } else if (rtmp->state == WAIT_FOR_C1) {
-      retVal = rtmp_process_c1(rtmp, buffer, output);
-    } else if (rtmp->state == WAIT_FOR_C2) {
-      retVal = rtmp_process_c2(rtmp, buffer, output);
-    } else if (rtmp->state == READ_CHUNK_TYPE) {
-      retVal = rtmp_process_read_chunk_type(rtmp, buffer, output);
-    } else if (rtmp->state == READ_CHUNK_EXTENDED_ID) {
-      retVal = rtmp_process_read_chunk_extended_id(rtmp, buffer, output);
-    } else if (rtmp->state == READ_CHUNK_HEADER) {
-      retVal = rtmp_process_read_chunk_header(rtmp, buffer, output);
-    } else if (rtmp->state == READ_CHUNK_EXTENDED_TIMESTAMP) {
-      retVal = rtmp_process_read_chunk_extended_timestamp(rtmp, buffer, output);
-    } else if (rtmp->state == READ_CHUNK_DATA) {
-      retVal = rtmp_process_read_chunk_data(rtmp, buffer, output);
-    } else if (rtmp->state == READ_NOTHING) {
-      retVal = rtmp_process_read_nothing(rtmp, buffer, output);
-    } else {
-      return -1;
-    }
-
-    printf("Data left: %d, State=%d\n", RingBuffer_available_data(buffer), rtmp->state);
-
-    if (retVal == 0) break;
+  if (rtmp->chunk_state == WAIT_FOR_C0) {
+    retVal = rtmp_process_c0(rtmp, buffer, output);
+  } else if (rtmp->chunk_state == WAIT_FOR_C1) {
+    retVal = rtmp_process_c1(rtmp, buffer, output);
+  } else if (rtmp->chunk_state == WAIT_FOR_C2) {
+    retVal = rtmp_process_c2(rtmp, buffer, output);
+  } else if (rtmp->chunk_state == READ_CHUNK_TYPE) {
+    retVal = rtmp_process_read_chunk_type(rtmp, buffer, output);
+  } else if (rtmp->chunk_state == READ_CHUNK_EXTENDED_ID) {
+    retVal = rtmp_process_read_chunk_extended_id(rtmp, buffer, output);
+  } else if (rtmp->chunk_state == READ_CHUNK_HEADER) {
+    retVal = rtmp_process_read_chunk_header(rtmp, buffer, output);
+  } else if (rtmp->chunk_state == READ_CHUNK_EXTENDED_TIMESTAMP) {
+    retVal = rtmp_process_read_chunk_extended_timestamp(rtmp, buffer, output);
+  } else if (rtmp->chunk_state == READ_CHUNK_DATA) {
+    retVal = rtmp_process_read_chunk_data(rtmp, buffer, output);
+  } else if (rtmp->chunk_state == READ_NOTHING) {
+    retVal = rtmp_process_read_nothing(rtmp, buffer, output);
+  } else {
+    return -1;
   }
 
-  return 1;
+  printf("Data left: %d, State=%d\n", RingBuffer_available_data(buffer), rtmp->chunk_state);
+
+  return retVal;
 }
 
 int rtmp_process_c0(Rtmp *rtmp, RingBuffer *buffer, RtmpOutputMessage *output) {
@@ -92,7 +87,7 @@ int rtmp_process_c0(Rtmp *rtmp, RingBuffer *buffer, RtmpOutputMessage *output) {
     output->message[i] = 0;
   }
 
-  rtmp->state = WAIT_FOR_C1;
+  rtmp->chunk_state = WAIT_FOR_C1;
 
   return 1;
 }
@@ -110,12 +105,14 @@ int rtmp_process_c1(Rtmp *rtmp, RingBuffer *buffer, RtmpOutputMessage *output) {
   output->message[6] = 0;
   output->message[7] = 0;
 
-  rtmp->state = WAIT_FOR_C2;
+  rtmp->chunk_state = WAIT_FOR_C2;
 
   return 1;
 }
 
 int rtmp_process_c2(Rtmp *rtmp, RingBuffer *buffer, RtmpOutputMessage *output) {
+  (void) output;
+
   if (RingBuffer_available_data(buffer) < 1536) return 0;
 
   printf("Process C2\n");
@@ -123,12 +120,14 @@ int rtmp_process_c2(Rtmp *rtmp, RingBuffer *buffer, RtmpOutputMessage *output) {
   unsigned char read[1536];
   RingBuffer_read(buffer, read, 1536);
 
-  rtmp->state = READ_CHUNK_TYPE;
+  rtmp->chunk_state = READ_CHUNK_TYPE;
 
   return 1;
 }
 
 int rtmp_process_read_chunk_type(Rtmp *rtmp, RingBuffer *buffer, RtmpOutputMessage *output) {
+  (void) output;
+
   if (RingBuffer_available_data(buffer) < 1) return 0;
 
   printf("Read chunk type\n");
@@ -162,15 +161,17 @@ int rtmp_process_read_chunk_type(Rtmp *rtmp, RingBuffer *buffer, RtmpOutputMessa
 
   printf("Chunk ID: %u\n", rtmp->chunk_id);
   if (rtmp->chunk_id <= 2) {
-    rtmp->state = READ_CHUNK_EXTENDED_ID;
+    rtmp->chunk_state = READ_CHUNK_EXTENDED_ID;
   } else {
-    rtmp->state = READ_CHUNK_HEADER;
+    rtmp->chunk_state = READ_CHUNK_HEADER;
   }
 
   return 1;
 }
 
 int rtmp_process_read_chunk_extended_id(Rtmp *rtmp, RingBuffer *buffer, RtmpOutputMessage *output) {
+  (void) output;
+
   if (rtmp->chunk_id == 0 && RingBuffer_available_data(buffer) < 1) return 0;
   if (rtmp->chunk_id == 1 && RingBuffer_available_data(buffer) < 2) return 0;
 
@@ -190,17 +191,22 @@ int rtmp_process_read_chunk_extended_id(Rtmp *rtmp, RingBuffer *buffer, RtmpOutp
   }
 
   printf("Chunk ID: %u\n", rtmp->chunk_id);
-  rtmp->state = READ_CHUNK_HEADER;
+  rtmp->chunk_state = READ_CHUNK_HEADER;
 
   return 1;
 }
 
 int rtmp_process_read_chunk_header(Rtmp *rtmp, RingBuffer *buffer, RtmpOutputMessage *output) {
-  if (rtmp->chunk_type == TYPE_0 && RingBuffer_available_data(buffer) < 11) return 0;
-  else if (rtmp->chunk_type == TYPE_1 && RingBuffer_available_data(buffer) < 7) return 0;
-  else if (rtmp->chunk_type == TYPE_2 && RingBuffer_available_data(buffer) < 3) return 0;
-  else if (rtmp->chunk_type == TYPE_3) {
-    rtmp->state = READ_CHUNK_DATA;
+  (void) output;
+
+  if (rtmp->chunk_type == TYPE_0) {
+    if (RingBuffer_available_data(buffer) < 11) return 0;
+  } else if (rtmp->chunk_type == TYPE_1) {
+    if (RingBuffer_available_data(buffer) < 7) return 0;
+  } else if (rtmp->chunk_type == TYPE_2) {
+    if (RingBuffer_available_data(buffer) < 3) return 0;
+  } else if (rtmp->chunk_type == TYPE_3) {
+    rtmp->chunk_state = READ_CHUNK_DATA;
     return 1;
   } else {
     printf("Unknown chunk type\n");
@@ -241,170 +247,110 @@ int rtmp_process_read_chunk_header(Rtmp *rtmp, RingBuffer *buffer, RtmpOutputMes
 
 void rtmp_read_extended_timestamp_or_data(Rtmp *rtmp) {
   if (rtmp->chunk_timestamp == 0xffffff) {
-    rtmp->state = READ_CHUNK_EXTENDED_TIMESTAMP;
+    rtmp->chunk_state = READ_CHUNK_EXTENDED_TIMESTAMP;
   } else {    
-    rtmp->message = malloc(sizeof(char) * rtmp->message_length);
+    rtmp->message = malloc(sizeof(unsigned char) * rtmp->message_length);
     rtmp->message_data_left = rtmp->message_length;
-    rtmp->state = READ_CHUNK_DATA;
+    rtmp->chunk_state = READ_CHUNK_DATA;
   }
 }
 
 
 int rtmp_process_read_chunk_extended_timestamp(Rtmp *rtmp, RingBuffer *buffer, RtmpOutputMessage *output) {
+  (void) output;
   if (RingBuffer_available_data(buffer) < 4) return 0;
 
   printf("Read extended timestamp.\n");
 
-  char extended_timestamp[4];
+  unsigned char extended_timestamp[4];
   RingBuffer_read(buffer, extended_timestamp, 4);
 
-  rtmp->chunk_timestamp = chars_to_int(timestamp, 4);
-  rtmp->state = READ_CHUNK_DATA;
+  rtmp->chunk_timestamp = chars_to_int(extended_timestamp, 4);
+  rtmp->chunk_state = READ_CHUNK_DATA;
 
   return 1;
 }
 
 int rtmp_process_read_chunk_data(Rtmp *rtmp, RingBuffer *buffer, RtmpOutputMessage *output) {
-  int read_amount = rtmp->message_data_left;
+  unsigned int read_amount = rtmp->message_data_left;
   if (rtmp->chunk_size < read_amount) 
     read_amount = rtmp->chunk_size;
 
-  if (RingBuffer_available_data(buffer) < read_amount) return 0;
+  if (RingBuffer_available_data(buffer) < (int)read_amount) return 0;
 
-  printf("Read data: %d, left: %d\n",rtmp->message, rtmp->message_data_left);
+  printf("Read data: %u, left: %u\n", (unsigned int)rtmp->message, rtmp->message_data_left);
 
   RingBuffer_read(buffer, rtmp->message + rtmp->message_length - rtmp->message_data_left, read_amount);
   rtmp->message_data_left -= read_amount;
 
-  printf("Finish read data: %d\n", read_amount);
-  rtmp->state = READ_CHUNK_TYPE;
+  printf("Finish read data: %u\n", read_amount);
+  rtmp->chunk_state = READ_CHUNK_TYPE;
 
   if (rtmp->message_data_left == 0) {
-    //propagate to top
-    Amf0InvokeMessage *invoke = amf0_create_invoke_message();
-    amf0_deserialize_invoke_message(invoke, rtmp->message);
+    RtmpOutputMessage *this_output = rtmp_create_output_message();
+    rtmp_process_message(rtmp, this_output);
 
-    printf("Command: %s\n", bdata(invoke->command));
-    printf("Transaction ID: %f\n", invoke->transaction_id);
-    printf("Arguments:\n");
-    print_amf0_object(invoke->arguments);
-    printf("\n");
-    
-    amf0_destroy_invoke_message(invoke);
+    if (this_output->length > 0) {
+      int number_of_chunks = this_output->length / rtmp->chunk_size;
+      if ((this_output->length % rtmp->chunk_size) > 0) number_of_chunks++;
+      printf("number_of_chunks=%d\n", number_of_chunks);
 
-    Amf0ResponseMessage *msg = amf0_create_response_message();
+      unsigned char header[12];
+      header[0] = 0x00 | rtmp->chunk_id;
 
-    msg->command = bfromcstr("_result");
-    msg->transaction_id = 1.0;
-    msg->properties = Hashmap_create(NULL, NULL);
-    msg->information = Hashmap_create(NULL, NULL);
+      int_to_byte_array(rtmp->chunk_timestamp + 1, header, 1, 3);
+      int_to_byte_array(this_output->length, header, 4, 3);
 
-    Amf0ObjectValue *val, *sub_val;
+      header[7] = 0x14;
 
-    val = malloc(sizeof(Amf0ObjectValue));
-    val->type = AMF0_STRING;
-    val->string = bfromcstr("FMS/3,5,5,2004");
-    Hashmap_set(msg->properties, bfromcstr("fmsVer"), val);
+      header[8] = 0x00;
+      header[9] = 0x00;  
+      header[10] = 0x00;
+      header[11] = 0x00;
 
-    val = malloc(sizeof(Amf0ObjectValue));
-    val->type = AMF0_NUMBER;
-    val->number = 239.000000;
-    Hashmap_set(msg->properties, bfromcstr("capabilities"), val);
+      rtmp_allocate_output_message_content(output, 12 + this_output->length + (number_of_chunks - 1));
 
-    val = malloc(sizeof(Amf0ObjectValue));
-    val->type = AMF0_NUMBER;
-    val->number = 1.0;
-    Hashmap_set(msg->properties, bfromcstr("mode"), val);
+      int output_index=0, input_index=0;
+      memcpy(output->message, header, 12); output_index += 12;
 
+      unsigned char chunk_header = 0b11000011;
 
-    val = malloc(sizeof(Amf0ObjectValue));
-    val->type = AMF0_STRING;
-    val->string = bfromcstr("status");
-    Hashmap_set(msg->information, bfromcstr("level"), val);
+      int chunk_index=0;
+      for (chunk_index=0;chunk_index<number_of_chunks;chunk_index++) {
+        int size = rtmp->chunk_size;
+        if ((this_output->length - input_index) < (unsigned int)size)
+          size = (this_output->length - input_index);
 
-    val = malloc(sizeof(Amf0ObjectValue));
-    val->type = AMF0_STRING;
-    val->string = bfromcstr("NetConnection.Connect.Success");
-    Hashmap_set(msg->information, bfromcstr("code"), val);
+        if (chunk_index > 0) {
+          memcpy(output->message + output_index, &chunk_header, 1); output_index += 1;
+        }
 
-    val = malloc(sizeof(Amf0ObjectValue));
-    val->type = AMF0_STRING;
-    val->string = bfromcstr("Connection succeeded");
-    Hashmap_set(msg->information, bfromcstr("description"), val);
+        memcpy(output->message + output_index, 
+                this_output->message + input_index, 
+                size);
 
-    val = malloc(sizeof(Amf0ObjectValue));
-    val->type = AMF0_ECMA_ARRAY;
-    val->ecma_array = Hashmap_create(NULL, NULL);
+        output_index += size;
+        input_index += size;
+      }
+    }
 
-      sub_val = malloc(sizeof(Amf0ObjectValue));
-      sub_val->type = AMF0_STRING;
-      sub_val->string = bfromcstr("zeus.0.0.1.tanin");
-
-      Hashmap_set(val->ecma_array, bfromcstr("version"), sub_val);
-    Hashmap_set(msg->information, bfromcstr("data"), val);
-
-    val = malloc(sizeof(Amf0ObjectValue));
-    val->type = AMF0_NUMBER;
-    val->number = 1584259571.0;
-    Hashmap_set(msg->information, bfromcstr("clientId"), val);
-
-    val = malloc(sizeof(Amf0ObjectValue));
-    val->type = AMF0_NUMBER;
-    val->number = 0.0;
-    Hashmap_set(msg->information, bfromcstr("objectEncoding"), val);
-
-    printf("Command: %s\n", bdata(msg->command));
-    printf("Transaction ID: %f\n", msg->transaction_id);
-    printf("Properties:\n");
-    print_amf0_object(msg->properties);
-    printf("Information:\n");
-    print_amf0_object(msg->information);
+    int i;
+    for (i=0;i<output->length;i++) {
+      printf("%x ", output->message[i]);
+    }
     printf("\n");
 
-    unsigned char write[65536];
-    int count = amf0_serialize_response_message(write, msg);
-    printf("count=%d\n", count);
-
-    amf0_destroy_response_message(msg);
-
-    unsigned char header[12];
-    header[0] = 0x03;
-
-    header[1] = 0x00;
-    header[2] = 0x00;
-    header[3] = 0x00;
-
-    // length
-    int_to_byte_array(count, header, 4, 3);
-    // printf("%x %x %x\n", header[4], header[5], header[6]);
-
-    header[7] = 0x14;
-
-    header[8] = 0x00;
-    header[9] = 0x00;  
-    header[10] = 0x00;
-    header[11] = 0x00;
-
-    rtmp_allocate_output_message_content(output, 12 + 1 + 1 + count);
-
-    int p = 0;
-    memcpy(output->message, header, p); p += 12;
-    memcpy(output->message + p, write, 128); p += 128;
-
-    unsigned char chunk_header = 0b11000011;
-    memcpy(output->message + p, &chunk_header, 1); p += 1;
-    memcpy(output->message + p, write + 128, 128); p += 128;
-
-    memcpy(output->message + p, &chunk_header, 1); p += 1;
-    memcpy(output->message + p, write + 128 + 128, count - 128 - 128); p += count - 128 - 128;
-
-    rtmp->state = READ_NOTHING;
+    rtmp_destroy_output_message(this_output);
+    free(rtmp->message);
   }
 
   return 1;
 }
 
 int rtmp_process_read_nothing(Rtmp *rtmp, RingBuffer *buffer, RtmpOutputMessage *output) {
+  (void) rtmp;
+  (void) output;
+
   if (RingBuffer_available_data(buffer) == 0) return 0;
 
   int length = RingBuffer_available_data(buffer);
@@ -419,4 +365,156 @@ int rtmp_process_read_nothing(Rtmp *rtmp, RingBuffer *buffer, RtmpOutputMessage 
   printf("\n");
 
   return 1;
+}
+
+void rtmp_process_message(Rtmp *rtmp, RtmpOutputMessage *output) {
+  if (rtmp->message_type == 0x14) {
+    return rtmp_process_command_message(rtmp, output);
+  } else if (rtmp->message_type == 0x11) {
+    printf("AMF3 is not supported.\n");
+    exit(1);
+  }
+}
+
+struct tagbstring COMMAND_CONNECT = bsStatic("connect");
+struct tagbstring COMMAND_CREATE_STREAM = bsStatic("createStream");
+void rtmp_process_command_message(Rtmp *rtmp, RtmpOutputMessage *output) {
+  bstring command; 
+  amf0_deserialize_string(&(command), rtmp->message + 1);
+
+  printf("Command: %s\n", bdata(command));
+  
+  if (bstrcmp(command, &COMMAND_CONNECT) == 0) {
+    rtmp_process_connect_message(rtmp, output);
+  } else if (bstrcmp(command, &COMMAND_CREATE_STREAM) == 0) {
+    rtmp_process_create_stream_message(rtmp, output);
+  }
+  
+  bdestroy(command);
+}
+
+void rtmp_process_connect_message(Rtmp *rtmp, RtmpOutputMessage *output) {
+  Amf0ConnectMessage *cmd = amf0_create_connect_message();
+  amf0_deserialize_connect_message(cmd, rtmp->message);
+
+  printf("Transaction ID: %f\n", cmd->transaction_id);
+  printf("Arguments:\n");
+  print_amf0_object(cmd->arguments);
+  printf("\n");
+  
+  amf0_destroy_connect_message(cmd);
+
+  Amf0ResponseConnectMessage *msg = amf0_create_response_connect_message();
+
+  msg->command = bfromcstr("_result");
+  msg->transaction_id = 1.0;
+  msg->properties = Hashmap_create(NULL, NULL);
+  msg->information = Hashmap_create(NULL, NULL);
+
+  Amf0ObjectValue *val, *sub_val;
+
+  val = malloc(sizeof(Amf0ObjectValue));
+  val->type = AMF0_STRING;
+  val->string = bfromcstr("FMS/3,5,5,2004");
+  Hashmap_set(msg->properties, bfromcstr("fmsVer"), val);
+
+  val = malloc(sizeof(Amf0ObjectValue));
+  val->type = AMF0_NUMBER;
+  val->number = 239.000000;
+  Hashmap_set(msg->properties, bfromcstr("capabilities"), val);
+
+  val = malloc(sizeof(Amf0ObjectValue));
+  val->type = AMF0_NUMBER;
+  val->number = 1.0;
+  Hashmap_set(msg->properties, bfromcstr("mode"), val);
+
+
+  val = malloc(sizeof(Amf0ObjectValue));
+  val->type = AMF0_STRING;
+  val->string = bfromcstr("status");
+  Hashmap_set(msg->information, bfromcstr("level"), val);
+
+  val = malloc(sizeof(Amf0ObjectValue));
+  val->type = AMF0_STRING;
+  val->string = bfromcstr("NetConnection.Connect.Success");
+  Hashmap_set(msg->information, bfromcstr("code"), val);
+
+  val = malloc(sizeof(Amf0ObjectValue));
+  val->type = AMF0_STRING;
+  val->string = bfromcstr("Connection succeeded");
+  Hashmap_set(msg->information, bfromcstr("description"), val);
+
+  val = malloc(sizeof(Amf0ObjectValue));
+  val->type = AMF0_ECMA_ARRAY;
+  val->ecma_array = Hashmap_create(NULL, NULL);
+
+    sub_val = malloc(sizeof(Amf0ObjectValue));
+    sub_val->type = AMF0_STRING;
+    sub_val->string = bfromcstr("zeus.0.0.1.tanin");
+
+    Hashmap_set(val->ecma_array, bfromcstr("version"), sub_val);
+  Hashmap_set(msg->information, bfromcstr("data"), val);
+
+  val = malloc(sizeof(Amf0ObjectValue));
+  val->type = AMF0_NUMBER;
+  val->number = 1584259571.0;
+  Hashmap_set(msg->information, bfromcstr("clientId"), val);
+
+  val = malloc(sizeof(Amf0ObjectValue));
+  val->type = AMF0_NUMBER;
+  val->number = 0.0;
+  Hashmap_set(msg->information, bfromcstr("objectEncoding"), val);
+
+  printf("Command: %s\n", bdata(msg->command));
+  printf("Transaction ID: %f\n", msg->transaction_id);
+  printf("Properties:\n");
+  print_amf0_object(msg->properties);
+  printf("Information:\n");
+  print_amf0_object(msg->information);
+  printf("\n");
+
+  unsigned char write[65536];
+  int count = amf0_serialize_response_connect_message(write, msg);
+  printf("count=%d\n", count);
+
+  amf0_destroy_response_connect_message(msg);
+
+  rtmp_allocate_output_message_content(output, count);
+  memcpy(output->message, write, count);
+}
+
+void rtmp_process_create_stream_message(Rtmp *rtmp, RtmpOutputMessage *output) {
+  Amf0CreateStreamMessage *cmd = amf0_create_create_stream_message();
+  amf0_deserialize_create_stream_message(cmd, rtmp->message);
+
+  printf("Transaction ID: %f\n", cmd->transaction_id);
+  if (cmd->object == NULL) {
+    printf("Object: NULL\n");
+  } else {
+    printf("Object:\n");
+    print_amf0_object(cmd->object);
+  }
+  printf("\n");
+  
+  amf0_destroy_create_stream_message(cmd);
+
+  Amf0ResponseCreateStreamMessage *response = amf0_create_response_create_stream_message();
+
+  response->command = bfromcstr("_result");
+  response->transaction_id = 2.0;
+  response->object = NULL;
+  response->stream_id = 0.0;
+
+  unsigned char write[65536];
+  int count = amf0_serialize_response_create_stream_message(write, response);
+  printf("count=%d\n", count);
+
+  amf0_destroy_response_create_stream_message(response);
+
+  rtmp_allocate_output_message_content(output, count);
+  memcpy(output->message, write, count);
+}
+
+void rtmp_process_publish_message(Rtmp *rtmp, RtmpOutputMessage *output) {
+
 }

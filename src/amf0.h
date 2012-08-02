@@ -53,37 +53,67 @@ struct Amf0StrictArray {
   int length;
 };
 
+
+
 typedef struct {
   bstring command;
   double transaction_id;
   Hashmap *arguments;
-} Amf0InvokeMessage;
+} Amf0ConnectMessage;
 
 typedef struct {
   bstring command;
   double transaction_id;
   Hashmap *properties;
   Hashmap *information;
-} Amf0ResponseMessage;
+} Amf0ResponseConnectMessage;
+
+Amf0ConnectMessage *amf0_create_connect_message();
+void amf0_destroy_connect_message(Amf0ConnectMessage *msg);
+
+Amf0ResponseConnectMessage *amf0_create_response_connect_message();
+void amf0_destroy_response_connect_message(Amf0ResponseConnectMessage *msg);
+
+int amf0_serialize_connect_message(unsigned char *output, Amf0ConnectMessage *msg);
+int amf0_deserialize_connect_message(Amf0ConnectMessage *msg, unsigned char *input);
+
+int amf0_serialize_response_connect_message(unsigned char *output, Amf0ResponseConnectMessage *msg);
+int amf0_deserialize_response_connect_message(Amf0ResponseConnectMessage *msg, unsigned char *input);
 
 
-Amf0InvokeMessage *amf0_create_invoke_message();
-void amf0_destroy_invoke_message(Amf0InvokeMessage *msg);
 
-Amf0ResponseMessage *amf0_create_response_message();
-void amf0_destroy_response_message(Amf0ResponseMessage *msg);
+typedef struct {
+  bstring command;
+  double transaction_id;
+  Hashmap *object;
+} Amf0CreateStreamMessage;
+
+typedef struct {
+  bstring command;
+  double transaction_id;
+  Hashmap *object;
+  double stream_id;
+} Amf0ResponseCreateStreamMessage;
+
+Amf0CreateStreamMessage *amf0_create_create_stream_message();
+void amf0_destroy_create_stream_message(Amf0CreateStreamMessage *msg);
+
+Amf0ResponseCreateStreamMessage *amf0_create_response_create_stream_message();
+void amf0_destroy_response_create_stream_message(Amf0ResponseCreateStreamMessage *msg);
+
+int amf0_serialize_create_stream_message(unsigned char *output, Amf0CreateStreamMessage *msg);
+int amf0_deserialize_create_stream_message(Amf0CreateStreamMessage *msg, unsigned char *input);
+
+int amf0_serialize_response_create_stream_message(unsigned char *output, Amf0ResponseCreateStreamMessage *msg);
+int amf0_deserialize_response_create_stream_message(Amf0ResponseCreateStreamMessage *msg, unsigned char *input);
+
+
 
 void amf0_destroy_object(Hashmap *object);
 void amf0_destroy_object_value(Amf0ObjectValue *object);
 void amf0_destroy_typed_object(Amf0TypedObject *object);
 void amf0_destroy_ecma_array(Hashmap *object);
 void amf0_destroy_strict_array(Amf0StrictArray *strict_array);
-
-int amf0_serialize_invoke_message(unsigned char *output, Amf0InvokeMessage *msg);
-int amf0_deserialize_invoke_message(Amf0InvokeMessage *msg, unsigned char *input);
-
-int amf0_serialize_response_message(unsigned char *output, Amf0ResponseMessage *msg);
-int amf0_deserialize_response_message(Amf0ResponseMessage *msg, unsigned char *input);
 
 int amf0_serialize_number(unsigned char *output, double number);
 int amf0_deserialize_number(double *number, unsigned char *input);

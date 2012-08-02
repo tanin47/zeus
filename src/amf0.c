@@ -1,7 +1,7 @@
 #include <amf0.h>
 
-Amf0InvokeMessage *amf0_create_invoke_message() {
-  Amf0InvokeMessage *msg = malloc(sizeof(Amf0InvokeMessage));
+Amf0ConnectMessage *amf0_create_connect_message() {
+  Amf0ConnectMessage *msg = malloc(sizeof(Amf0ConnectMessage));
   msg->command = NULL;
   msg->transaction_id = 0.0;
   msg->arguments = NULL;
@@ -9,14 +9,47 @@ Amf0InvokeMessage *amf0_create_invoke_message() {
   return msg;
 }
 
-void amf0_destroy_invoke_message(Amf0InvokeMessage *msg) {
+void amf0_destroy_connect_message(Amf0ConnectMessage *msg) {
   bdestroy(msg->command);
   msg->transaction_id = 0.0;
-  amf0_destroy_object(msg->arguments);
+  if (msg->arguments != NULL) amf0_destroy_object(msg->arguments);
 }
 
-Amf0ResponseMessage *amf0_create_response_message() {
-  Amf0ResponseMessage *msg = malloc(sizeof(Amf0ResponseMessage));
+
+int amf0_serialize_connect_message(unsigned char *output, Amf0ConnectMessage *msg) {
+  int i = 0;
+
+  i += amf0_serialize_string(output + i, msg->command);
+  i += amf0_serialize_number(output + i, msg->transaction_id);
+  i += amf0_serialize_object(output + i, msg->arguments);
+
+  return i;
+}
+
+int amf0_deserialize_connect_message(Amf0ConnectMessage *msg, unsigned char *input) {
+  unsigned int start = (unsigned int)input;
+
+  input++;
+  input += amf0_deserialize_string(&(msg->command), input);
+
+  input++;
+  input += amf0_deserialize_number(&(msg->transaction_id), input);
+
+  if (input[0] == AMF0_NULL) {
+    msg->arguments = NULL;
+    input++;
+  } else {
+    input++;
+    input += amf0_deserialize_object(&(msg->arguments), input);
+  }
+
+  return (unsigned int)input - start;
+}
+
+
+
+Amf0ResponseConnectMessage *amf0_create_response_connect_message() {
+  Amf0ResponseConnectMessage *msg = malloc(sizeof(Amf0ResponseConnectMessage));
   msg->command = NULL;
   msg->transaction_id = 0.0;
   msg->properties = NULL;
@@ -25,12 +58,153 @@ Amf0ResponseMessage *amf0_create_response_message() {
   return msg;
 }
 
-void amf0_destroy_response_message(Amf0ResponseMessage *msg) {
+void amf0_destroy_response_connect_message(Amf0ResponseConnectMessage *msg) {
   bdestroy(msg->command);
   msg->transaction_id = 0.0;
   amf0_destroy_object(msg->properties);
   amf0_destroy_object(msg->information);
 }
+
+int amf0_serialize_response_connect_message(unsigned char *output, Amf0ResponseConnectMessage *msg) {
+  int i = 0;
+
+  i += amf0_serialize_string(output + i, msg->command);
+  i += amf0_serialize_number(output + i, msg->transaction_id);
+  i += amf0_serialize_object(output + i, msg->properties);
+  i += amf0_serialize_object(output + i, msg->information);
+
+  return i;
+}
+
+int amf0_deserialize_response_connect_message(Amf0ResponseConnectMessage *msg, unsigned char *input) {
+  unsigned int start = (unsigned int)input;
+
+  input++;
+  input += amf0_deserialize_string(&(msg->command), input);
+
+  input++;
+  input += amf0_deserialize_number(&(msg->transaction_id), input);
+
+  if (input[0] == AMF0_NULL) {
+    msg->properties = NULL;
+    input++;
+  } else {
+    input++;
+    input += amf0_deserialize_object(&(msg->properties), input);
+  }
+
+  if (input[0] == AMF0_NULL) {
+    msg->information = NULL;
+    input++;
+  } else {
+    input++;
+    input += amf0_deserialize_object(&(msg->information), input);
+  }
+
+  return (unsigned int)input - start;
+}
+
+
+Amf0CreateStreamMessage *amf0_create_create_stream_message() {
+  Amf0CreateStreamMessage *msg = malloc(sizeof(Amf0CreateStreamMessage));
+  msg->command = NULL;
+  msg->transaction_id = 0.0;
+  msg->object = NULL;
+
+  return msg;
+}
+
+void amf0_destroy_create_stream_message(Amf0CreateStreamMessage *msg) {
+  bdestroy(msg->command);
+  msg->transaction_id = 0.0;
+  if (msg->object != NULL) amf0_destroy_object(msg->object);
+}
+
+Amf0ResponseCreateStreamMessage *amf0_create_response_create_stream_message() {
+  Amf0ResponseCreateStreamMessage *msg = malloc(sizeof(Amf0ResponseCreateStreamMessage));
+  msg->command = NULL;
+  msg->transaction_id = 0.0;
+  msg->object = NULL;
+  msg->stream_id = 0.0;
+
+  return msg;
+}
+
+void amf0_destroy_response_create_stream_message(Amf0ResponseCreateStreamMessage *msg) {
+  bdestroy(msg->command);
+  msg->transaction_id = 0.0;
+  if (msg->object != NULL) amf0_destroy_object(msg->object);
+  msg->stream_id = 0.0;
+}
+
+int amf0_serialize_create_stream_message(unsigned char *output, Amf0CreateStreamMessage *msg) {
+  int i = 0;
+
+  i += amf0_serialize_string(output + i, msg->command);
+  i += amf0_serialize_number(output + i, msg->transaction_id);
+  i += amf0_serialize_object(output + i, msg->object);
+
+  return i;
+}
+
+int amf0_deserialize_create_stream_message(Amf0CreateStreamMessage *msg, unsigned char *input) {
+  unsigned int start = (unsigned int)input;
+
+  input++;
+  input += amf0_deserialize_string(&(msg->command), input);
+
+  input++;
+  input += amf0_deserialize_number(&(msg->transaction_id), input);
+
+  if (input[0] == AMF0_NULL) {
+    msg->object = NULL;
+    input++;
+  } else {
+    input++;
+    input += amf0_deserialize_object(&(msg->object), input);
+  }
+
+  return (unsigned int)input - start;
+}
+
+int amf0_serialize_response_create_stream_message(unsigned char *output, Amf0ResponseCreateStreamMessage *msg) {
+  int i = 0;
+
+  i += amf0_serialize_string(output + i, msg->command);
+  printf("%d ", i);
+  i += amf0_serialize_number(output + i, msg->transaction_id);
+  printf("%d ", i);
+  i += amf0_serialize_object(output + i, msg->object);
+  printf("%d ", i);
+  i += amf0_serialize_number(output + i, msg->stream_id);
+  printf("%d ", i);
+  
+  return i;
+}
+
+int amf0_deserialize_response_create_stream_message(Amf0ResponseCreateStreamMessage *msg, unsigned char *input) {
+  unsigned int start = (unsigned int)input;
+
+  input++;
+  input += amf0_deserialize_string(&(msg->command), input);
+
+  input++;
+  input += amf0_deserialize_number(&(msg->transaction_id), input);
+
+  if (input[0] == AMF0_NULL) {
+    msg->object = NULL;
+    input++;
+  } else {
+    input++;
+    input += amf0_deserialize_object(&(msg->object), input);
+  }
+
+  input++;
+  input += amf0_deserialize_number(&(msg->stream_id), input);
+
+  return (unsigned int)input - start;
+}
+
 
 void amf0_destroy_object(Hashmap *object) {
   if (object == NULL) return;
@@ -85,77 +259,6 @@ void amf0_destroy_strict_array(Amf0StrictArray *strict_array) {
   free(strict_array->data);
   free(strict_array);
 }
-
-int amf0_serialize_invoke_message(unsigned char *output, Amf0InvokeMessage *msg) {
-  int i = 0;
-
-  i += amf0_serialize_string(output + i, msg->command);
-  i += amf0_serialize_number(output + i, msg->transaction_id);
-  i += amf0_serialize_object(output + i, msg->arguments);
-
-  return i;
-}
-
-int amf0_deserialize_invoke_message(Amf0InvokeMessage *msg, unsigned char *input) {
-  unsigned int start = (unsigned int)input;
-
-  input++;
-  input += amf0_deserialize_string(&(msg->command), input);
-
-  input++;
-  input += amf0_deserialize_number(&(msg->transaction_id), input);
-
-  if (input[0] == AMF0_NULL) {
-    msg->arguments = NULL;
-    input++;
-  } else {
-    input++;
-    input += amf0_deserialize_object(&(msg->arguments), input);
-  }
-
-  return (unsigned int)input - start;
-}
-
-
-int amf0_serialize_response_message(unsigned char *output, Amf0ResponseMessage *msg) {
-  int i = 0;
-
-  i += amf0_serialize_string(output + i, msg->command);
-  i += amf0_serialize_number(output + i, msg->transaction_id);
-  i += amf0_serialize_object(output + i, msg->properties);
-  i += amf0_serialize_object(output + i, msg->information);
-
-  return i;
-}
-
-int amf0_deserialize_response_message(Amf0ResponseMessage *msg, unsigned char *input) {
-  unsigned int start = (unsigned int)input;
-
-  input++;
-  input += amf0_deserialize_string(&(msg->command), input);
-
-  input++;
-  input += amf0_deserialize_number(&(msg->transaction_id), input);
-
-  if (input[0] == AMF0_NULL) {
-    msg->properties = NULL;
-    input++;
-  } else {
-    input++;
-    input += amf0_deserialize_object(&(msg->properties), input);
-  }
-
-  if (input[0] == AMF0_NULL) {
-    msg->information = NULL;
-    input++;
-  } else {
-    input++;
-    input += amf0_deserialize_object(&(msg->information), input);
-  }
-
-  return (unsigned int)input - start;
-}
-
 
 int amf0_serialize_number(unsigned char *output, double number) {
   output[0] = AMF0_NUMBER;

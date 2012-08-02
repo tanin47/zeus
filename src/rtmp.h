@@ -8,7 +8,7 @@
 #include <amf0.h>
 
 typedef enum { 
-  UNRECOGNIZED_STATE,
+  UNRECOGNIZED_CHUNK_STATE,
   WAIT_FOR_C0,
   WAIT_FOR_C1,
   WAIT_FOR_C2,
@@ -18,6 +18,13 @@ typedef enum {
   READ_CHUNK_EXTENDED_TIMESTAMP,
   READ_CHUNK_DATA,
   READ_NOTHING
+} RtmpChunkState;
+
+typedef enum { 
+  UNRECOGNIZED_STATE,
+  WAIT_FOR_CONNECT,
+  WAIT_FOR_CREATE_STREAM,
+  WAIT_FOR_PUBLISH
 } RtmpState;
 
 typedef enum {
@@ -29,6 +36,7 @@ typedef enum {
 } RtmpChunkType;
 
 typedef struct {
+  RtmpChunkState chunk_state;
   RtmpState state;
   unsigned int chunk_size;
 
@@ -44,16 +52,18 @@ typedef struct {
 } Rtmp;
 
 typedef struct {
+  unsigned int message_type;
+  unsigned int message_stream_id;
   unsigned int length;
   unsigned int data_left;
   unsigned char *message;
 } RtmpOutputMessage;
 
 
-Rtmp *rtmp_create_output_message(RtmpOutputMessage *output);
+RtmpOutputMessage *rtmp_create_output_message();
 void rtmp_allocate_output_message_content(RtmpOutputMessage *output, unsigned int length);
 void rtmp_destroy_output_message(RtmpOutputMessage *output);
-unsigned int rtmp_output_message_start_at(RtmpOutputMessage *output);
+unsigned char *rtmp_output_message_start_at(RtmpOutputMessage *output);
 
 Rtmp *rtmp_create();
 void rtmp_destroy(Rtmp *rtmp);
@@ -75,12 +85,18 @@ int rtmp_process_read_chunk_header_type_1(Rtmp *rtmp, RingBuffer *buffer, RtmpOu
 int rtmp_process_read_chunk_header_type_2(Rtmp *rtmp, RingBuffer *buffer, RtmpOutputMessage *output);
 int rtmp_process_read_chunk_header_type_3(Rtmp *rtmp, RingBuffer *buffer, RtmpOutputMessage *output);
 
-int rtmp_read_extended_timestamp_or_data(Rtmp *rtmp, RingBuffer *buffer, RtmpOutputMessage *output);
+void rtmp_read_extended_timestamp_or_data(Rtmp *rtmp);
 int rtmp_process_read_chunk_extended_timestamp(Rtmp *rtmp, RingBuffer *buffer, RtmpOutputMessage *output);
 int rtmp_process_read_chunk_data(Rtmp *rtmp, RingBuffer *buffer, RtmpOutputMessage *output);
 
+int rtmp_process_read_nothing(Rtmp *rtmp, RingBuffer *buffer, RtmpOutputMessage *output);
+
 // RTMP Application Layer
-int rtmp_process_process_message();
+void rtmp_process_message(Rtmp *rtmp, RtmpOutputMessage *output);
+void rtmp_process_command_message(Rtmp *rtmp, RtmpOutputMessage *output);
+void rtmp_process_connect_message(Rtmp *rtmp, RtmpOutputMessage *output);
+void rtmp_process_create_stream_message(Rtmp *rtmp, RtmpOutputMessage *output);
+void rtmp_process_publish_message(Rtmp *rtmp, RtmpOutputMessage *output);
 
 
 #endif

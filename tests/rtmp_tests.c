@@ -16,6 +16,8 @@ char *test_enum()
   printf("State: %d\n", r->state);
 
   free(r);
+
+  return NULL;
 }
 
 

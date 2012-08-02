@@ -2,8 +2,8 @@
 #include <amf0.h>
 #include <dbg.h>
 
-int test_serialize_and_deserialize_invoke_message() {
-  Amf0InvokeMessage *msg = amf0_create_invoke_message();
+int test_serialize_and_deserialize_connect_message() {
+  Amf0ConnectMessage *msg = amf0_create_connect_message();
 
   msg->command = bfromcstr("Hello");
   msg->transaction_id = 1.0;
@@ -111,7 +111,7 @@ int test_serialize_and_deserialize_invoke_message() {
   Hashmap_set(msg->arguments, bfromcstr("TypedKey"), val);
 
   unsigned char buffer[65536];
-  int count = amf0_serialize_invoke_message(buffer, msg);
+  int count = amf0_serialize_connect_message(buffer, msg);
   
   printf("length=%d\n", count);
   int i;
@@ -120,10 +120,10 @@ int test_serialize_and_deserialize_invoke_message() {
   }
   printf("\n\n\n");
 
-  amf0_destroy_invoke_message(msg);
+  amf0_destroy_connect_message(msg);
 
-  msg = amf0_create_invoke_message();
-  amf0_deserialize_invoke_message(msg, buffer);
+  msg = amf0_create_connect_message();
+  amf0_deserialize_connect_message(msg, buffer);
 
   printf("Deserialization\n");
   printf("Command: %s\n", bdata(msg->command));
@@ -132,20 +132,20 @@ int test_serialize_and_deserialize_invoke_message() {
   print_amf0_object(msg->arguments);
   printf("\n");
 
-  amf0_destroy_invoke_message(msg);
+  amf0_destroy_connect_message(msg);
 
   return 1;
 }
 
-int test_serialize_and_deserialize_invoke_message_with_null_argument() {
-  Amf0InvokeMessage *msg = amf0_create_invoke_message();
+int test_serialize_and_deserialize_connect_message_with_null_argument() {
+  Amf0ConnectMessage *msg = amf0_create_connect_message();
 
   msg->command = bfromcstr("Hello");
   msg->transaction_id = 1.0;
   msg->arguments = NULL;
 
   unsigned char buffer[65536];
-  int count = amf0_serialize_invoke_message(buffer, msg);
+  int count = amf0_serialize_connect_message(buffer, msg);
   
   printf("length=%d\n", count);
   int i;
@@ -154,24 +154,24 @@ int test_serialize_and_deserialize_invoke_message_with_null_argument() {
   }
   printf("\n\n\n");
 
-  amf0_destroy_invoke_message(msg);
+  amf0_destroy_connect_message(msg);
 
-  msg = amf0_create_invoke_message();
-  amf0_deserialize_invoke_message(msg, buffer);
+  msg = amf0_create_connect_message();
+  amf0_deserialize_connect_message(msg, buffer);
 
   printf("Deserialization\n");
   printf("Command: %s\n", bdata(msg->command));
   printf("Transaction ID: %f\n", msg->transaction_id);
-  printf("Arguments: %u\n", msg->arguments);
+  printf("Arguments: %u\n", (unsigned int)msg->arguments);
   if (msg->arguments == NULL) printf("msg->arguments is null.\n");
   printf("\n");
 
-  amf0_destroy_invoke_message(msg);
+  amf0_destroy_connect_message(msg);
 
   return 1;
 }
 
-int test_deserialize_real_invoke_message()
+int test_deserialize_real_connect_message()
 {
   unsigned char input[] = {
     0x02, 0x00, 0x07, 0x63, 0x6F, 0x6E, 0x6E, 0x65, 0x63, 0x74, //= String "connect"
@@ -213,8 +213,8 @@ int test_deserialize_real_invoke_message()
     0x00, 0x00, 0x09
   };
 
-  Amf0InvokeMessage *msg = amf0_create_invoke_message();
-  amf0_deserialize_invoke_message(msg, input);
+  Amf0ConnectMessage *msg = amf0_create_connect_message();
+  amf0_deserialize_connect_message(msg, input);
 
   printf("Deserialization\n");
   printf("Command: %s\n", bdata(msg->command));
@@ -223,12 +223,12 @@ int test_deserialize_real_invoke_message()
   print_amf0_object(msg->arguments);
   printf("\n");
   
-  amf0_destroy_invoke_message(msg);
+  amf0_destroy_connect_message(msg);
 
   return 1;
 }
 
-int test_serialize_real_response_message() {
+int test_serialize_real_response_connect_message() {
 // (command) “_result”
 // (transaction id) 1
 // (value)
@@ -242,7 +242,7 @@ int test_serialize_real_response_message() {
 //                version: “3,5,5,2004” },
 //         clientId:, 0x1584259571.0,
 //         objectEncoding: 3.0 }
-  Amf0ResponseMessage *msg = amf0_create_response_message();
+  Amf0ResponseConnectMessage *msg = amf0_create_response_connect_message();
 
   msg->command = bfromcstr("_result");
   msg->transaction_id = 1.0;
@@ -306,7 +306,7 @@ int test_serialize_real_response_message() {
 
 
   unsigned char buffer[65536];
-  int count = amf0_serialize_response_message(buffer, msg);
+  int count = amf0_serialize_response_connect_message(buffer, msg);
 
   printf("length=%d\n", count);
   int i;
@@ -315,19 +315,19 @@ int test_serialize_real_response_message() {
   }
   printf("\n\n\n");
 
-  amf0_destroy_response_message(msg);
+  amf0_destroy_response_connect_message(msg);
 
   return 1;
 }
 
-int test_deserialize_real_response_message()
+int test_deserialize_real_response_connect_message()
 {
   unsigned char input[] = {
    0x02, 0x00, 0x07, 0x5F, 0x72, 0x65, 0x73, 0x75, 0x6C, 0x74, 0x00, 0x3F, 0xF0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0x00, 0x06, 0x66, 0x6D, 0x73, 0x56, 0x65, 0x72, 0x02, 0x00, 0x0E, 0x46, 0x4D, 0x53, 0x2F, 0x33, 0x2C, 0x35, 0x2C, 0x35, 0x2C, 0x32, 0x30, 0x30, 0x34, 0x00, 0x0C, 0x63, 0x61, 0x70, 0x61, 0x62, 0x69, 0x6C, 0x69, 0x74, 0x69, 0x65, 0x73, 0x00, 0x40, 0x3F, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04, 0x6D, 0x6F, 0x64, 0x65, 0x00, 0x3F, 0xF0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x09, 0x03, 0x00, 0x05, 0x6C, 0x65, 0x76, 0x65, 0x6C, 0x02, 0x00, 0x06, 0x73, 0x74, 0x61, 0x74, 0x75, 0x73, 0x00, 0x04, 0x63, 0x6F, 0x64, 0x65, 0x02, 0x00, 0x1D, 0x4E, 0x65, 0x74, 0x43, 0x6F, 0x6E, 0x6E, 0x65, 0x63, 0x74, 0x69, 0x6F, 0x6E, 0x2E, 0x43, 0x6F, 0x6E, 0x6E, 0x65, 0x63, 0x74, 0x2E, 0x53, 0x75, 0x63, 0x63, 0x65, 0x73, 0x73, 0x00, 0x0B, 0x64, 0x65, 0x73, 0x63, 0x72, 0x69, 0x70, 0x74, 0x69, 0x6F, 0x6E, 0x02, 0x00, 0x15, 0x43, 0x6F, 0x6E, 0x6E, 0x65, 0x63, 0x74, 0x69, 0x6F, 0x6E, 0x20, 0x73, 0x75, 0x63, 0x63, 0x65, 0x65, 0x64, 0x65, 0x64, 0x2E, 0x00, 0x04, 0x64, 0x61, 0x74, 0x61, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x07, 0x76, 0x65, 0x72, 0x73, 0x69, 0x6F, 0x6E, 0x02, 0x00, 0x0A, 0x33, 0x2C, 0x35, 0x2C, 0x35, 0x2C, 0x32, 0x30, 0x30, 0x34, 0x00, 0x00, 0x09, 0x00, 0x08, 0x63, 0x6C, 0x69, 0x65, 0x6E, 0x74, 0x69, 0x64, 0x00, 0x41, 0xD7, 0x9B, 0x78, 0x7C, 0xC0, 0x00, 0x00, 0x00, 0x0E, 0x6F, 0x62, 0x6A, 0x65, 0x63, 0x74, 0x45, 0x6E, 0x63, 0x6F, 0x64, 0x69, 0x6E, 0x67, 0x00, 0x40, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x09
   };
 
-  Amf0ResponseMessage *msg = amf0_create_response_message();
-  amf0_deserialize_response_message(msg, input);
+  Amf0ResponseConnectMessage *msg = amf0_create_response_connect_message();
+  amf0_deserialize_response_connect_message(msg, input);
 
   printf("Deserialization\n");
   printf("Command: %s\n", bdata(msg->command));
@@ -338,18 +338,18 @@ int test_deserialize_real_response_message()
   print_amf0_object(msg->information);
   printf("\n");
   
-  amf0_destroy_response_message(msg);
+  amf0_destroy_response_connect_message(msg);
 
   return 1;
 }
 
 char *test_functions()
 {
-  mu_assert(test_deserialize_real_invoke_message(), "test_deserialize_real_invoke_message() failed.");
-  mu_assert(test_serialize_real_response_message(), "test_serialize_real_response_message() failed.");
-  mu_assert(test_deserialize_real_response_message(), "test_deserialize_real_response_message() failed.");
-  mu_assert(test_serialize_and_deserialize_invoke_message(), "test_serialize_and_deserialize_invoke_message() failed.");
-  mu_assert(test_serialize_and_deserialize_invoke_message_with_null_argument(), "test_serialize_and_deserialize_invoke_message_with_null_argument() failed.");
+  mu_assert(test_deserialize_real_connect_message(), "test_deserialize_real_connect_message() failed.");
+  mu_assert(test_serialize_real_response_connect_message(), "test_serialize_real_response_connect_message() failed.");
+  mu_assert(test_deserialize_real_response_connect_message(), "test_deserialize_real_response_connect_message() failed.");
+  mu_assert(test_serialize_and_deserialize_connect_message(), "test_serialize_and_deserialize_connect_message() failed.");
+  mu_assert(test_serialize_and_deserialize_connect_message_with_null_argument(), "test_serialize_and_deserialize_connect_message_with_null_argument() failed.");
 
   return NULL;
 }
