@@ -171,13 +171,9 @@ int amf0_serialize_response_create_stream_message(unsigned char *output, Amf0Res
   int i = 0;
 
   i += amf0_serialize_string(output + i, msg->command);
-  printf("%d ", i);
   i += amf0_serialize_number(output + i, msg->transaction_id);
-  printf("%d ", i);
   i += amf0_serialize_object(output + i, msg->object);
-  printf("%d ", i);
   i += amf0_serialize_number(output + i, msg->stream_id);
-  printf("%d ", i);
   
   return i;
 }
@@ -204,6 +200,63 @@ int amf0_deserialize_response_create_stream_message(Amf0ResponseCreateStreamMess
 
   return (unsigned int)input - start;
 }
+
+Amf0PublishMessage *amf0_create_publish_message() {
+  Amf0PublishMessage *msg = malloc(sizeof(Amf0PublishMessage));
+  msg->command = NULL;
+  msg->transaction_id = 0.0;
+  msg->publishing_name = NULL;
+  msg->publishing_type = NULL;
+
+  return msg;
+}
+
+void amf0_destroy_publish_message(Amf0PublishMessage *msg) {
+  if (msg->command != NULL) bdestroy(msg->command);
+  msg->transaction_id = 0.0;
+  if (msg->publishing_name != NULL) bdestroy(msg->publishing_name);
+  if (msg->publishing_type != NULL) bdestroy(msg->publishing_type);
+}
+
+int amf0_serialize_publish_message(unsigned char *output, Amf0PublishMessage *msg) {
+  int i = 0;
+
+  i += amf0_serialize_string(output + i, msg->command);
+  i += amf0_serialize_number(output + i, msg->transaction_id);
+  i += amf0_serialize_null(output + i);
+  i += amf0_serialize_string(output + i, msg->publishing_name);
+  i += amf0_serialize_string(output + i, msg->publishing_type);
+  
+  return i;
+}
+
+int amf0_deserialize_publish_message(Amf0PublishMessage *msg, unsigned char *input) {
+  unsigned int start = (unsigned int)input;
+
+  input++;
+  input += amf0_deserialize_string(&(msg->command), input);
+
+  input++;
+  input += amf0_deserialize_number(&(msg->transaction_id), input);
+
+  // null type
+  input++;
+
+  input++;
+  input += amf0_deserialize_string(&(msg->publishing_name), input);
+
+  input++;
+  input += amf0_deserialize_string(&(msg->publishing_type), input);
+
+  return (unsigned int)input - start;
+}
+
+
+
+
+
+
+
 
 
 void amf0_destroy_object(Hashmap *object) {

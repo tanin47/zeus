@@ -108,6 +108,20 @@ int amf0_serialize_response_create_stream_message(unsigned char *output, Amf0Res
 int amf0_deserialize_response_create_stream_message(Amf0ResponseCreateStreamMessage *msg, unsigned char *input);
 
 
+typedef struct {
+  bstring command;
+  double transaction_id;
+  bstring publishing_name;
+  bstring publishing_type;
+} Amf0PublishMessage;
+
+Amf0PublishMessage *amf0_create_publish_message();
+void amf0_destroy_publish_message(Amf0PublishMessage *msg);
+
+int amf0_serialize_publish_message(unsigned char *output, Amf0PublishMessage *msg);
+int amf0_deserialize_publish_message(Amf0PublishMessage *msg, unsigned char *input);
+
+
 
 void amf0_destroy_object(Hashmap *object);
 void amf0_destroy_object_value(Amf0ObjectValue *object);

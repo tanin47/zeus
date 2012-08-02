@@ -34,6 +34,7 @@ Rtmp *rtmp_create() {
   rtmp->chunk_state = WAIT_FOR_C0;
   rtmp->state = WAIT_FOR_CONNECT;
   rtmp->chunk_size = 128;
+  rtmp->end = 0;
   return rtmp;
 }
 
@@ -378,6 +379,9 @@ void rtmp_process_message(Rtmp *rtmp, RtmpOutputMessage *output) {
 
 struct tagbstring COMMAND_CONNECT = bsStatic("connect");
 struct tagbstring COMMAND_CREATE_STREAM = bsStatic("createStream");
+struct tagbstring COMMAND_CLOSE_STREAM = bsStatic("closeStream");
+struct tagbstring COMMAND_DELETE_STREAM = bsStatic("deleteStream");
+struct tagbstring COMMAND_PUBLISH = bsStatic("publish");
 void rtmp_process_command_message(Rtmp *rtmp, RtmpOutputMessage *output) {
   bstring command; 
   amf0_deserialize_string(&(command), rtmp->message + 1);
@@ -388,6 +392,12 @@ void rtmp_process_command_message(Rtmp *rtmp, RtmpOutputMessage *output) {
     rtmp_process_connect_message(rtmp, output);
   } else if (bstrcmp(command, &COMMAND_CREATE_STREAM) == 0) {
     rtmp_process_create_stream_message(rtmp, output);
+  } else if (bstrcmp(command, &COMMAND_CLOSE_STREAM) == 0) {
+    rtmp->end = 1;
+  } else if (bstrcmp(command, &COMMAND_DELETE_STREAM) == 0) {
+    rtmp->end = 1;
+  } else if (bstrcmp(command, &COMMAND_PUBLISH) == 0) {
+    rtmp_process_publish_message(rtmp, output);
   }
   
   bdestroy(command);
@@ -503,7 +513,7 @@ void rtmp_process_create_stream_message(Rtmp *rtmp, RtmpOutputMessage *output) {
   response->command = bfromcstr("_result");
   response->transaction_id = 2.0;
   response->object = NULL;
-  response->stream_id = 0.0;
+  response->stream_id = 1.0;
 
   unsigned char write[65536];
   int count = amf0_serialize_response_create_stream_message(write, response);
@@ -516,5 +526,13 @@ void rtmp_process_create_stream_message(Rtmp *rtmp, RtmpOutputMessage *output) {
 }
 
 void rtmp_process_publish_message(Rtmp *rtmp, RtmpOutputMessage *output) {
+  Amf0PublishMessage *cmd = amf0_create_publish_message();
+  amf0_deserialize_publish_message(cmd, rtmp->message);
 
+  printf("Transaction ID: %f\n", cmd->transaction_id);
+  printf("Publishing Name: %s\n", bdata(cmd->publishing_name));
+  printf("Publishing Type: %s\n", bdata(cmd->publishing_type));
+
+  
+  amf0_destroy_publish_message(cmd);
 }

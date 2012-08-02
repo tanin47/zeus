@@ -49,6 +49,8 @@ typedef struct {
   unsigned char *message;
   unsigned int message_length;
   unsigned int message_data_left;
+
+  int end;
 } Rtmp;
 
 typedef struct {
