@@ -30,46 +30,57 @@ typedef enum {
 
 typedef struct {
   RtmpState state;
-  char *c1;
-
+  unsigned int chunk_size;
 
   RtmpChunkType chunk_type;
   unsigned int chunk_id;
   unsigned int chunk_timestamp;
-  unsigned int packet_length;
-  unsigned int chunk_size;
-  int chunk_write_to;
+  unsigned int message_type;
+  unsigned int message_stream_id;
 
   unsigned char *message;
+  unsigned int message_length;
+  unsigned int message_data_left;
 } Rtmp;
+
+typedef struct {
+  unsigned int length;
+  unsigned int data_left;
+  unsigned char *message;
+} RtmpOutputMessage;
+
+
+Rtmp *rtmp_create_output_message(RtmpOutputMessage *output);
+void rtmp_allocate_output_message_content(RtmpOutputMessage *output, unsigned int length);
+void rtmp_destroy_output_message(RtmpOutputMessage *output);
+unsigned int rtmp_output_message_start_at(RtmpOutputMessage *output);
 
 Rtmp *rtmp_create();
 void rtmp_destroy(Rtmp *rtmp);
 
-int rtmp_multiplex(Rtmp *rtmp, RingBuffer *buffer, RingBuffer *write_buffer);
-int rtmp_process_c0(Rtmp *rtmp, RingBuffer *buffer, RingBuffer *write_buffer);
-int rtmp_process_c1(Rtmp *rtmp, RingBuffer *buffer, RingBuffer *write_buffer);
-int rtmp_process_c2(Rtmp *rtmp, RingBuffer *buffer, RingBuffer *write_buffer);
 
-int rtmp_process_read_chunk_type(Rtmp *rtmp, RingBuffer *buffer, RingBuffer *write_buffer);
+// RTMP Chunking Layer
+int rtmp_multiplex(Rtmp *rtmp, RingBuffer *buffer, RtmpOutputMessage *output);
+int rtmp_process_c0(Rtmp *rtmp, RingBuffer *buffer, RtmpOutputMessage *output);
+int rtmp_process_c1(Rtmp *rtmp, RingBuffer *buffer, RtmpOutputMessage *output);
+int rtmp_process_c2(Rtmp *rtmp, RingBuffer *buffer, RtmpOutputMessage *output);
 
-int rtmp_process_read_chunk_extended_id(Rtmp *rtmp, RingBuffer *buffer, RingBuffer *write_buffer);
+int rtmp_process_read_chunk_type(Rtmp *rtmp, RingBuffer *buffer, RtmpOutputMessage *output);
 
-int rtmp_process_read_chunk_header(Rtmp *rtmp, RingBuffer *buffer, RingBuffer *write_buffer);
-int rtmp_process_read_chunk_header_type_0(Rtmp *rtmp, RingBuffer *buffer, RingBuffer *write_buffer);
-int rtmp_process_read_chunk_header_type_1(Rtmp *rtmp, RingBuffer *buffer, RingBuffer *write_buffer);
-int rtmp_process_read_chunk_header_type_2(Rtmp *rtmp, RingBuffer *buffer, RingBuffer *write_buffer);
-int rtmp_process_read_chunk_header_type_3(Rtmp *rtmp, RingBuffer *buffer, RingBuffer *write_buffer);
+int rtmp_process_read_chunk_extended_id(Rtmp *rtmp, RingBuffer *buffer, RtmpOutputMessage *output);
 
-int rtmp_process_read_chunk_extended_timestamp(Rtmp *rtmp, RingBuffer *buffer, RingBuffer *write_buffer);
+int rtmp_process_read_chunk_header(Rtmp *rtmp, RingBuffer *buffer, RtmpOutputMessage *output);
+int rtmp_process_read_chunk_header_type_0(Rtmp *rtmp, RingBuffer *buffer, RtmpOutputMessage *output);
+int rtmp_process_read_chunk_header_type_1(Rtmp *rtmp, RingBuffer *buffer, RtmpOutputMessage *output);
+int rtmp_process_read_chunk_header_type_2(Rtmp *rtmp, RingBuffer *buffer, RtmpOutputMessage *output);
+int rtmp_process_read_chunk_header_type_3(Rtmp *rtmp, RingBuffer *buffer, RtmpOutputMessage *output);
 
-int rtmp_process_read_chunk_data(Rtmp *rtmp, RingBuffer *buffer, RingBuffer *write_buffer);
-int rtmp_process_read_chunk_data_type_0(Rtmp *rtmp, RingBuffer *buffer, RingBuffer *write_buffer);
-int rtmp_process_read_chunk_data_type_1(Rtmp *rtmp, RingBuffer *buffer, RingBuffer *write_buffer);
-int rtmp_process_read_chunk_data_type_2(Rtmp *rtmp, RingBuffer *buffer, RingBuffer *write_buffer);
-int rtmp_process_read_chunk_data_type_3(Rtmp *rtmp, RingBuffer *buffer, RingBuffer *write_buffer);
+int rtmp_read_extended_timestamp_or_data(Rtmp *rtmp, RingBuffer *buffer, RtmpOutputMessage *output);
+int rtmp_process_read_chunk_extended_timestamp(Rtmp *rtmp, RingBuffer *buffer, RtmpOutputMessage *output);
+int rtmp_process_read_chunk_data(Rtmp *rtmp, RingBuffer *buffer, RtmpOutputMessage *output);
 
-int rtmp_process_read_nothing(Rtmp *rtmp, RingBuffer *buffer, RingBuffer *write_buffer);
+// RTMP Application Layer
+int rtmp_process_process_message();
 
 
 #endif
