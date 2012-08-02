@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<mx:Application xmlns:mx="http://www.adobe.com/2006/mxml" layout="absolute" width="280" height="309" viewSourceURL="srcview/index.html">
+    <mx:Panel x="27.5" y="10" width="225" height="282" layout="absolute" title="Camera View" creationComplete="OnPanelInit()">
+        <mx:VideoDisplay x="28.5" y="10" width="148" height="166" id="vidPicture"/>
+        <mx:Button x="48.5" y="184" label="Take Pictrure" height="35" width="108" id="btnTakePicture" click="btnTakePictureClick()"/>
+    </mx:Panel>
+    
+    <mx:Script>
+        <![CDATA[
+            import mx.graphics.codec.JPEGEncoder;
+            import mx.controls.Alert;
+        
+            public var oCamera:Camera = null;
+            
+            private function OnPanelInit():void
+            {
+                vidPicture.attachCamera(null);            
+
+                if(Camera.names.length > 0)
+                {
+                    oCamera = Camera.getCamera();
+                    // perform some tuning accordingly if you have a controlled environment
+                    oCamera.setMode(vidPicture.width, vidPicture.height, 30);
+                    oCamera.setQuality(1600,0);
+                    
+                    // finally attach camera with video display
+                    vidPicture.attachCamera(oCamera);
+                }
+                else
+                {
+                    Alert.show("You don't seem to have a camera");
+                }
+            }
+            
+            private function btnTakePictureClick():void
+            {
+                if(Camera.names.length < 1)
+                {
+                    Alert.show("You don't seem to have a camera");
+                    return;
+                }
+                var oBmpData:BitmapData = new BitmapData(vidPicture.width, vidPicture.height);
+                oBmpData.draw(vidPicture);
+                
+                //var oBmpSnap:Bitmap = new Bitmap(oBmpData);
+                
+                var oJpg:JPEGEncoder = new JPEGEncoder();
+                
+                var ba:ByteArray = oJpg.encode(oBmpData);
+                
+                var fr:FileReference = new FileReference();
+                fr.save(ba, "MyPic.jpg");
+                
+            }
+        ]]>
+    </mx:Script>
+    
+</mx:Application>
+

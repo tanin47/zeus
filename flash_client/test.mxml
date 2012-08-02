@@ -1,0 +1,109 @@
+<?xml version="1.0" encoding="utf-8"?>
+<mx:Application xmlns:mx="http://www.adobe.com/2006/mxml" layout="absolute" width="630" height="560" viewSourceURL="srcview/index.html">
+    <mx:Panel x="5" y="5" width="610" height="520" layout="absolute" title="Camera View" creationComplete="OnPanelInit()">
+        <mx:VideoDisplay x="0" y="0" width="600" height="400" id="vidPicture"/>
+        <mx:Label x="10" y="10" text="15" id="counter"/>
+        <mx:Button x="250" y="410" label="Start Camera" height="35" width="100" id="btnStartCamera" click="btnStartCameraClicked()"/>
+        <mx:TextInput x="10" y="450" width="300" height="20" id="rtmp_url" text="rtmp://localhost:1935"/>
+
+    </mx:Panel>
+    
+    <mx:Script>
+        <![CDATA[
+            import mx.graphics.codec.JPEGEncoder;
+            import mx.controls.Alert;
+        
+            private var _diskStream:NetStream;
+            private var _diskConn:NetConnection;
+            private var _camera:Camera;
+            private var _mic:Microphone; 
+
+            private const LOAD_DELAY:int = 5;
+            private var timeElapsed:int = 0;
+            private var loadTimer:Timer;
+            
+            private function OnPanelInit():void
+            {
+                vidPicture.attachCamera(null);            
+
+                if(Camera.names.length > 0)
+                {
+                    _camera = Camera.getCamera();
+
+                    _camera.setMode(vidPicture.width, vidPicture.height, 30);
+                    _camera.setQuality(144000, 100);
+                    
+                    vidPicture.attachCamera(_camera);
+                }
+                else
+                {
+                    Alert.show("You don't seem to have a camera");
+                }
+
+                _mic = Microphone.getMicrophone();
+            }
+            
+            private function btnStartCameraClicked():void
+            {
+                if(Camera.names.length < 1)
+                {
+                    Alert.show("You don't seem to have a camera");
+                    return;
+                }
+
+                NetConnection.defaultObjectEncoding = ObjectEncoding.AMF0;
+
+                _diskConn = new NetConnection();
+                _diskConn.addEventListener(NetStatusEvent.NET_STATUS,netStatusHandler);
+                _diskConn.connect(rtmp_url.text);
+            }
+
+            private function netStatusHandler(event:NetStatusEvent):void
+            {
+                mx.controls.Alert.show(event.info.code);
+                if(event.info.code == "NetConnection.Connect.Success")
+                {
+                    _diskStream = new NetStream(_diskConn);
+                    _diskStream.client = this;
+                    _diskStream.attachCamera(_camera);
+                    _diskStream.attachAudio(_mic);
+                    _diskStream.publish("test", "record");
+
+                    // start the timer, which simulates a loading delay
+                    //loadTimer = new Timer(1000);
+                    //loadTimer.addEventListener(TimerEvent.TIMER, incrementTime);
+                    //loadTimer.start();
+                }
+                else 
+                {
+                    mx.controls.Alert.show("Failed to connect!");
+                }
+            }
+
+            private function incrementTime(event:TimerEvent):void {
+                timeElapsed++;
+                updateCounter();
+
+                if ((LOAD_DELAY - timeElapsed) == 0)
+                {
+                    loadTimer.stop();
+                    loadTimer.removeEventListener(TimerEvent.TIMER, incrementTime);
+                    loadTimer = null;
+
+                    _diskStream.close();
+                }
+            }
+
+            private function updateCounter():void {
+                var timeRemaining:uint = LOAD_DELAY - timeElapsed;
+                var timeRemainingMsg:String = timeRemaining.toString() + " second";
+                if (timeRemaining != 1) { timeRemainingMsg += "s"; }
+                timeRemainingMsg += " remaining.";
+
+                counter.text =  timeRemainingMsg;
+            }
+        ]]>
+    </mx:Script>
+    
+</mx:Application>
+

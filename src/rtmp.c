@@ -29,6 +29,15 @@ unsigned char *rtmp_output_message_start_at(RtmpOutputMessage *output) {
   return output->message + output->length - output->data_left;
 }
 
+
+int rtmp_should_acknowledge(Rtmp *rtmp) {
+  if ((rtmp->total_read - rtmp->last_total_read) >= rtmp->window_acknowledgement_size) {
+    return 1;
+  } else {
+    return 0;
+  }
+}
+
 Rtmp *rtmp_create() {
   Rtmp *rtmp = malloc(sizeof(Rtmp));
   rtmp->chunk_state = WAIT_FOR_C0;
@@ -36,6 +45,9 @@ Rtmp *rtmp_create() {
   rtmp->chunk_size = 128;
   rtmp->end = 0;
   rtmp->file = NULL;
+  rtmp->last_total_read = 0;
+  rtmp->total_read = 0;
+  rtmp->window_acknowledgement_size = 2500000;
   return rtmp;
 }
 
@@ -44,8 +56,8 @@ void rtmp_destroy(Rtmp *rtmp) {
 }
 
 int rtmp_multiplex(Rtmp *rtmp, RingBuffer *buffer, RtmpOutputMessage *output) {
-  printf("----------------------\n");
-  printf("Available data: %d, State=%d\n", RingBuffer_available_data(buffer), rtmp->chunk_state);
+  //printf("----------------------\n");
+  //printf("Available data: %d, State=%d\n", RingBuffer_available_data(buffer), rtmp->chunk_state);
 
   int retVal = -1;
 
@@ -71,7 +83,7 @@ int rtmp_multiplex(Rtmp *rtmp, RingBuffer *buffer, RtmpOutputMessage *output) {
     return -1;
   }
 
-  printf("Data left: %d, State=%d\n", RingBuffer_available_data(buffer), rtmp->chunk_state);
+  //printf("Data left: %d, State=%d\n", RingBuffer_available_data(buffer), rtmp->chunk_state);
 
   return retVal;
 }
@@ -79,7 +91,7 @@ int rtmp_multiplex(Rtmp *rtmp, RingBuffer *buffer, RtmpOutputMessage *output) {
 int rtmp_process_c0(Rtmp *rtmp, RingBuffer *buffer, RtmpOutputMessage *output) {
   if (RingBuffer_available_data(buffer) < 1) return 0;
 
-  printf("Process C0, Write S0,S1\n");
+  //printf("Process C0, Write S0,S1\n");
 
   rtmp_allocate_output_message_content(output, 1537);
   RingBuffer_read(buffer, output->message, 1);
@@ -97,7 +109,7 @@ int rtmp_process_c0(Rtmp *rtmp, RingBuffer *buffer, RtmpOutputMessage *output) {
 int rtmp_process_c1(Rtmp *rtmp, RingBuffer *buffer, RtmpOutputMessage *output) {
   if (RingBuffer_available_data(buffer) < 1536) return 0;
 
-  printf("Process C1, Write S2\n");
+  //printf("Process C1, Write S2\n");
 
   rtmp_allocate_output_message_content(output, 1536);
   RingBuffer_read(buffer, output->message, 1536);
@@ -117,7 +129,7 @@ int rtmp_process_c2(Rtmp *rtmp, RingBuffer *buffer, RtmpOutputMessage *output) {
 
   if (RingBuffer_available_data(buffer) < 1536) return 0;
 
-  printf("Process C2\n");
+  //printf("Process C2\n");
 
   unsigned char read[1536];
   RingBuffer_read(buffer, read, 1536);
@@ -132,7 +144,7 @@ int rtmp_process_read_chunk_type(Rtmp *rtmp, RingBuffer *buffer, RtmpOutputMessa
 
   if (RingBuffer_available_data(buffer) < 1) return 0;
 
-  printf("Read chunk type\n");
+  //printf("Read chunk type\n");
   rtmp->chunk_type = UNRECOGNIZED_CHUNK_TYPE;
 
   unsigned char byte;
@@ -145,23 +157,23 @@ int rtmp_process_read_chunk_type(Rtmp *rtmp, RingBuffer *buffer, RtmpOutputMessa
   rtmp->chunk_id = rtmp->chunk_id & 0b00111111;
 
   if (first == 0 && second == 0) {
-    printf("Chunk Type 0\n");
+    //printf("Chunk Type 0\n");
     rtmp->chunk_type = TYPE_0;
   } else if (first == 0 && second > 0) {
-    printf("Chunk Type 1\n");
+    //printf("Chunk Type 1\n");
     rtmp->chunk_type = TYPE_1;
   } else if (first > 0 && second == 0) {
-    printf("Chunk Type 2\n");
+    //printf("Chunk Type 2\n");
     rtmp->chunk_type = TYPE_2;
   } else if (first > 0 && second > 0) {
-    printf("Chunk Type 3\n");
+    //printf("Chunk Type 3\n");
     rtmp->chunk_type = TYPE_3;
   } else {
-    printf("Unrecognized chunk type %u %u\n", first, second);
+    //printf("Unrecognized chunk type %u %u\n", first, second);
     rtmp->chunk_type = UNRECOGNIZED_CHUNK_TYPE;
   }
 
-  printf("Chunk ID: %u\n", rtmp->chunk_id);
+  //printf("Chunk ID: %u\n", rtmp->chunk_id);
   if (rtmp->chunk_id <= 2) {
     rtmp->chunk_state = READ_CHUNK_EXTENDED_ID;
   } else {
@@ -188,11 +200,11 @@ int rtmp_process_read_chunk_extended_id(Rtmp *rtmp, RingBuffer *buffer, RtmpOutp
   } else if (rtmp->chunk_id == 2) {
 
   } else {
-    printf("Unrecognized extended id: %d\n", rtmp->chunk_id);
+    //printf("Unrecognized extended id: %d\n", rtmp->chunk_id);
     exit(1);
   }
 
-  printf("Chunk ID: %u\n", rtmp->chunk_id);
+  //printf("Chunk ID: %u\n", rtmp->chunk_id);
   rtmp->chunk_state = READ_CHUNK_HEADER;
 
   return 1;
@@ -211,7 +223,7 @@ int rtmp_process_read_chunk_header(Rtmp *rtmp, RingBuffer *buffer, RtmpOutputMes
     rtmp->chunk_state = READ_CHUNK_DATA;
     return 1;
   } else {
-    printf("Unknown chunk type\n");
+    //printf("Unknown chunk type\n");
     exit(1);
   }
   
@@ -236,12 +248,12 @@ int rtmp_process_read_chunk_header(Rtmp *rtmp, RingBuffer *buffer, RtmpOutputMes
     rtmp->message_stream_id = chars_to_int(message_stream_id, 4);
   }
 
-  printf("Read header type 0\n");
-  printf("Timestamp=%u, message_length=%u, message_type=%u, message_stream_id=%u\n", 
-          rtmp->chunk_timestamp,
-          rtmp->message_length,
-          rtmp->message_type,
-          rtmp->message_stream_id);
+  //printf("Read header type 0\n");
+  // printf("Timestamp=%u, message_length=%u, message_type=%u, message_stream_id=%u\n", 
+          // rtmp->chunk_timestamp,
+          // rtmp->message_length,
+          // rtmp->message_type,
+          // rtmp->message_stream_id);
 
   rtmp_read_extended_timestamp_or_data(rtmp);
   return 1;
@@ -262,7 +274,7 @@ int rtmp_process_read_chunk_extended_timestamp(Rtmp *rtmp, RingBuffer *buffer, R
   (void) output;
   if (RingBuffer_available_data(buffer) < 4) return 0;
 
-  printf("Read extended timestamp.\n");
+  //printf("Read extended timestamp.\n");
 
   unsigned char extended_timestamp[4];
   RingBuffer_read(buffer, extended_timestamp, 4);
@@ -280,12 +292,12 @@ int rtmp_process_read_chunk_data(Rtmp *rtmp, RingBuffer *buffer, RtmpOutputMessa
 
   if (RingBuffer_available_data(buffer) < (int)read_amount) return 0;
 
-  printf("Read data: %u, left: %u\n", (unsigned int)rtmp->message, rtmp->message_data_left);
+  //printf("Read data: %u, left: %u\n", (unsigned int)rtmp->message, rtmp->message_data_left);
 
   RingBuffer_read(buffer, rtmp->message + rtmp->message_length - rtmp->message_data_left, read_amount);
   rtmp->message_data_left -= read_amount;
 
-  printf("Finish read data: %u\n", read_amount);
+  //printf("Finish read data: %u\n", read_amount);
   rtmp->chunk_state = READ_CHUNK_TYPE;
 
   if (rtmp->message_data_left == 0) {
@@ -295,7 +307,7 @@ int rtmp_process_read_chunk_data(Rtmp *rtmp, RingBuffer *buffer, RtmpOutputMessa
     if (this_output->length > 0) {
       int number_of_chunks = this_output->length / rtmp->chunk_size;
       if ((this_output->length % rtmp->chunk_size) > 0) number_of_chunks++;
-      printf("number_of_chunks=%d\n", number_of_chunks);
+      //printf("number_of_chunks=%d\n", number_of_chunks);
 
       unsigned char header[12];
       header[0] = 0x00 | rtmp->chunk_id;
@@ -338,9 +350,9 @@ int rtmp_process_read_chunk_data(Rtmp *rtmp, RingBuffer *buffer, RtmpOutputMessa
 
     int i;
     for (i=0;i<output->length;i++) {
-      printf("%x ", output->message[i]);
+      //printf("%x ", output->message[i]);
     }
-    printf("\n");
+    //printf("\n");
 
     rtmp_destroy_output_message(this_output);
     free(rtmp->message);
@@ -370,9 +382,28 @@ int rtmp_process_read_nothing(Rtmp *rtmp, RingBuffer *buffer, RtmpOutputMessage 
 }
 
 void rtmp_process_message(Rtmp *rtmp, RtmpOutputMessage *output) {
+  printf("message_type: %x\n", rtmp->message_type);
+
   if (rtmp->message_type == 0x14) {
     return rtmp_process_command_message(rtmp, output);
   } else if (rtmp->message_type == 0x09) {
+    int start = 0;
+
+    while (start < rtmp->message_length) {
+      unsigned int payload_length = chars_to_int(rtmp->message + start + 1, 3);
+
+      // printf("====\n");
+      // printf("message_type=%u\n", rtmp->message[start]);
+      // printf("payload_length=%u\n", payload_length);
+      // printf("timestamp=%u\n", chars_to_int(rtmp->message + start + 1 + 3, 4));
+      // printf("stream_id=%u\n", chars_to_int(rtmp->message + start + 1 + 3 + 4, 3));
+      // //printf("whole_message_length=%u\n", rtmp->message_length);
+      // printf("====\n");
+
+      start += 11 + payload_length;
+      break;
+    }
+
     fwrite(rtmp->message, 1, rtmp->message_length, rtmp->file);
   } else if (rtmp->message_type == 0x11) {
     printf("AMF3 is not supported.\n");
@@ -488,7 +519,7 @@ void rtmp_process_connect_message(Rtmp *rtmp, RtmpOutputMessage *output) {
 
   unsigned char write[65536];
   int count = amf0_serialize_response_connect_message(write, msg);
-  printf("count=%d\n", count);
+  //printf("count=%d\n", count);
 
   amf0_destroy_response_connect_message(msg);
 
@@ -520,7 +551,7 @@ void rtmp_process_create_stream_message(Rtmp *rtmp, RtmpOutputMessage *output) {
 
   unsigned char write[65536];
   int count = amf0_serialize_response_create_stream_message(write, response);
-  printf("count=%d\n", count);
+  //printf("count=%d\n", count);
 
   amf0_destroy_response_create_stream_message(response);
 

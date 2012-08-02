@@ -50,6 +50,10 @@ typedef struct {
   unsigned int message_length;
   unsigned int message_data_left;
 
+  unsigned int last_total_read;
+  unsigned int total_read;
+  unsigned int window_acknowledgement_size;
+
   FILE *file;
 
   int end;
@@ -71,6 +75,9 @@ unsigned char *rtmp_output_message_start_at(RtmpOutputMessage *output);
 
 Rtmp *rtmp_create();
 void rtmp_destroy(Rtmp *rtmp);
+
+
+int rtmp_should_acknowledge(Rtmp *rtmp);
 
 
 // RTMP Chunking Layer
