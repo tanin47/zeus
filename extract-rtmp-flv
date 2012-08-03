@@ -1,0 +1,1172 @@
+#! /usr/bin/perl -w
+
+#########################################################################
+#                                                                       #
+#               Extract Flash video from an RTMP tcpdump                #
+#                 Copyright (C) 2008-11, John Zaitseff                  #
+#                                                                       #
+#########################################################################
+
+# Author:   John Zaitseff <J.Zaitseff@zap.org.au>
+# Date:     31st March, 2011
+# Version:  1.8
+
+# This script extracts Flash video (FLV file format) from an RTMP stream
+# captured by tcpdump.  To capture the RTMP stream and extract it to an
+# FLV video:
+#   1. Run as root:
+#        tcpdump -i eth0 -p -s 0 -w file.tcpdump -v tcp src port 1935
+#   2. As an ordinary user, open the relevant video URL in your browser
+#      window and start playback,
+#   3. When the video finishes playing, quit the tcpdump program (using ^C),
+#   4. Run this script as an ordinary user:
+#        extract-rtmp-flv file.tcpdump file.flv
+
+
+# This program is free software.  You may distribute it and/or modify it
+# under the terms of the GNU General Public License as published by the
+# Free Software Foundation; either Version 2 of the license, or (at your
+# option) any later version.
+#
+# This program is distributed in the hope that it will be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+# General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program; if not, write to the Free Software Foundation, Inc.,
+# 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
+
+
+#########################################################################
+# Configuration parameters and default values
+
+use strict;       # Enforce better programming habits
+use bytes;        # Don't use Unicode in this program
+
+(our $O = $0)             =~ s,^.*/,,;  # Script name (without path)
+our $version              = "1.8";  # Script version
+
+our $ignore_missing       = 1;    # True to ignore missing TCP/IP packets
+our $insert_zeros         = 1;    # Insert zero bytes when data missing
+
+our $debug                = 1;    # True (non-zero) for debugging output
+our $debug_ascii_in       = 1;    # True to assume tcpdump is in ASCII
+our $debug_ascii_sloppy   = 1;    # True to allow sloppiness in ASCII
+our $debug_tcpip          = 0;    # True to dump TCP/IP info
+our $debug_rtmp           = 1;    # True to dump RTMP packets
+our $debug_flv            = 1;    # True to dump FLV info
+
+our $def_rtmp_chunk_size  = 128;  # Default RTMP chunk size
+our $max_rtmp_routing_id  = 16;   # Maximum allowable value of routing ID
+
+# Programs needed for this script to function
+
+our $tcpdump_prog = "/usr/sbin/tcpdump"; # tcpdump(8) binary
+
+# Function prototypes
+
+sub dump_string ($;$);      # Dump string as hexadecimal and ASCII
+sub bool ($);       # Return boolean as a string
+sub packN24 (@);      # Pack integers as 24-bit strings
+
+sub datastream_rewind ();   # Reset reading from data stream
+sub datastream_remember ();   # Remember current position of stream
+sub datastream_read ($);    # Read bytes from the data stream
+
+sub flv_data_init ($);      # Set up reading from FLV stream
+sub flv_data_read ($);      # Read bytes from the FLV stream
+
+
+#########################################################################
+# Initialise global variables
+
+our @ip_hdr_data          = ();   # IP header, as an array of strings
+our @tcp_hdr_data         = ();   # TCP header, also an array of strings
+our @tcp_seq_num          = ();   # Relative TCP sequence number of data
+our @payload_data         = ();   # Actual raw data (array of strings)
+
+our $src_ip_addr;     # Source IP address
+our $src_tcp_port;      # Source TCP port number
+our $dst_ip_addr;     # Destination IP address
+our $dst_tcp_port;      # Destination TCP port number
+
+our $initial_tcp_seq_num;   # TCP sequence number of first packet
+
+our @rtmp_hdr_data        = ();   # Header for RTMP packets
+our @rtmp_amf_index       = ();   #   AMF index
+our @rtmp_time_stamp      = ();   #   Time stamp of packet
+our @rtmp_data_len        = ();   #   Length of data in packet
+our @rtmp_type            = ();   #   Content type of packet
+our @rtmp_routing_id      = ();   #   Routing ID of packet
+our @rtmp_payload         = ();   # Assembled RTMP packet data (no header)
+our $rtmp_chunk_size;     # Current RTMP chunk size
+
+our $flv_name;        # Name of the FLV stream
+
+# Variables needed by the datastream functions
+
+our $datastream_eof       = 0;    # Non-zero if EOF() reached
+our $datastream_bytenum   = 0;    # Current byte count
+our $datastream_pktnum    = 0;    # Current IP packet number
+our $datastream_idx       = 0;    # Index within data of packet
+
+our $saved_eof;       # Saved value of EOF() flag
+our $saved_bytenum;     # Saved value of current byte count
+our $saved_pktnum;      # Saved value of current packet number
+our $saved_idx;       # Saved value of index in packet
+
+# Variables needed by the flv_data functions
+
+our $flv_data_eof         = 0;    # Non-zero if EOF() reached
+our $flv_data_bytenum     = 0;    # Current byte count (in RTMP stream)
+our $flv_data_pktnum      = 0;    # Current RTMP packet number
+our $flv_data_idx         = 0;    # Index within data of RTMP packet
+
+
+#########################################################################
+# Main program
+
+if ($#ARGV != 1) {
+    die "$O: Need exactly two arguments\n";
+}
+
+our $infile  = $ARGV[0];
+our $outfile = $ARGV[1];
+
+
+# Read the tcpdump into memory, parsing it appropriately
+
+    # This script assumes the tcpdump file has been created by running
+    # tcpdump as shown above.  In particular, it assumes that only server
+    # responses on TCP port 1935 have been recorded.
+
+if ($debug) {
+    print "Parsing tcpdump output for $infile\n\n";
+}
+
+if ($debug_ascii_in) {
+    open(INFILE, "$infile")
+  or die "$O: Could not read $infile: $!\n";
+} else {
+    open(INFILE, "$tcpdump_prog -r $infile -s 0 -vvv -X 2>/dev/null |")
+  or die "$O: Could not run tcpdump: $!\n";
+}
+
+my $pktnum = 0;
+
+while (<INFILE>) {
+    my $lnum = $.;
+    chomp;
+
+    # Read the header line
+
+    # for tcpdump 3.x:
+    #   if (! /^\d\d:\d\d:\d\d\.\d{6} IP \(tos 0x[0-9a-f]+, ttl \d+, id \d+, offset \d+, flags \[\w+\], proto:? TCP \(6\), length:? (\d+)\) \S+ > \S+: \S+, cksum 0x[0-9a-f]+ \(correct\), \d+:\d+\(\d+\) ack \d+ win \d+ <[^>]+>$/) {
+    #       die "$O: Unexpected tcpdump header line, line $.:\n$_\n";
+    #   }
+
+    # for tcpdump 4.x:
+    if (! /^\d\d:\d\d:\d\d\.\d{6} IP \(tos 0x[0-9a-f]+, ttl \d+, id \d+, offset \d+, flags \[\w+\], proto TCP \(6\), length (\d+)\)$/) {
+  die "$O: Unexpected tcpdump header line, line $.:\n$_\n";
+    }
+
+    my $pkt_len  = $1;
+    my $raw_data = "";
+
+    # Read the second header line
+
+    # for tcpdump 3.x:
+    #   ;
+
+    # for tcpdump 4.x (next 5 lines):
+    $_ = <INFILE>;
+    chomp;
+
+    if (! /^\s+\S+ > \S+: Flags \[\S+\], cksum 0x[0-9a-f]+ \((?:in)?correct(?: -> 0x[0-9a-f]+)?\), seq [0-9:]+, ack \d+, win \d+,(?: options \[[^]]+\],)? length \d+$/) {
+  die "$O: Unexpected tcpdump second header line, line $.:\n$_\n";
+    }
+
+    # Read the packet data
+
+    for (my $nlines = 0; $nlines < $pkt_len / 16; $nlines++) {
+  if (eof(INFILE)) {
+      die "$O: Unexpected tcpdump end of file, line $.\n";
+  }
+
+  my $line = <INFILE>;
+  chomp $line;
+
+  if ($line !~ /^\t0x[0-9a-f]{4}:  [ 0-9a-f]{4} [ 0-9a-f]{4} [ 0-9a-f]{4} [ 0-9a-f]{4} [ 0-9a-f]{4} [ 0-9a-f]{4} [ 0-9a-f]{4} [ 0-9a-f]{4}  /i) {
+      die "$O: Unexpected tcpdump data format, line $.:\n$line\n";
+  }
+
+  my $idx = $nlines * 16;
+
+  if (! $debug_ascii_sloppy) {
+      if (substr($line, 0, 10) ne sprintf("\t0x%04x:  ", $idx)) {
+    die "$O: Unexpected tcpdump data index, line $. (expecting " .
+        sprintf("%04x", $idx) . "):\n$line\n";
+      }
+  } else {
+      # Don't check the data index value as strictly
+      if (substr($line, 0, 10) !~ /^\t0x[0-9a-f]{4}:  $/i) {
+    die "$O: Unexpected tcpdump data index, line $. (expecting " .
+        sprintf("%04x", $idx) . "):\n$line\n";
+      }
+  }
+
+  substr($line, 0, 10, ""); # Remove the data index
+
+  for (my $i = $idx; $i < ($idx + 16 > $pkt_len ? $pkt_len : $idx + 16); $i++) {
+      # Remove preceding white space
+      $line =~ s/^ +//;
+
+      # Convert two hex bytes into a character (ugly hack!)
+      my $byte = pack("C", hex(substr($line, 0, 2)));
+      substr($line, 0, 2, "");
+
+      $raw_data .= $byte;
+  }
+    }
+
+    # At this stage, the entire packet is in the string $raw_data
+
+    # Parse IP header
+
+    if (((my $b = unpack("C", substr($raw_data, 0, 1))) & 0xF0) != 0x40) {
+  die "$O: Not an IPv4 packet, line $lnum, byte 0x0000: " .
+      sprintf("%02x", $b) . "\n";
+    }
+
+    my $ip_hdr_len = (unpack("C", substr($raw_data, 0, 1)) & 0x0F) * 4;
+    if ($ip_hdr_len < 20) {
+  die "$O: Impossible IP header length, line $lnum: $ip_hdr_len\n";
+    }
+
+    my $ip_pkt_len = unpack("n", substr($raw_data, 2, 2));
+    if ($ip_pkt_len != $pkt_len) {
+  die "$O: Mismatched lengths, line $lnum: IP header $ip_pkt_len vs derived $pkt_len\n";
+    }
+
+    my $ip_flags = unpack("C", substr($raw_data, 7, 1)) & 0xE0;
+    my $ip_frag_offset = unpack("C", substr($raw_data, 7, 1)) & 0x1F;
+    my $ip_fragmented = (($ip_flags & 0x20 != 0) || ($ip_frag_offset != 0));
+
+    if ($ip_fragmented) {
+  die "$O: Cannot handle IP fragments at this time, line $lnum\n";
+    }
+
+    my $tmp_src_ip_addr = unpack("C", substr($raw_data, 12, 1)) . "." .
+        unpack("C", substr($raw_data, 13, 1)) . "." .
+        unpack("C", substr($raw_data, 14, 1)) . "." .
+        unpack("C", substr($raw_data, 15, 1));
+    if ($pktnum == 0) {
+  $src_ip_addr = $tmp_src_ip_addr;
+    } elsif ($tmp_src_ip_addr ne $src_ip_addr) {
+  die "$O: Source IP addresses differ, line $lnum: $tmp_src_ip_addr vs $src_ip_addr\n";
+    }
+
+    my $tmp_dst_ip_addr = unpack("C", substr($raw_data, 16, 1)) . "." .
+        unpack("C", substr($raw_data, 17, 1)) . "." .
+        unpack("C", substr($raw_data, 18, 1)) . "." .
+        unpack("C", substr($raw_data, 19, 1));
+    if ($pktnum == 0) {
+  $dst_ip_addr = $tmp_dst_ip_addr;
+    } elsif ($tmp_dst_ip_addr ne $dst_ip_addr) {
+  die "$O: Destination IP addresses differ, line $lnum: $tmp_dst_ip_addr vs $dst_ip_addr\n";
+    }
+
+    if ((my $b = unpack("C", substr($raw_data, 9, 1))) != 0x06) {
+  die "$O: Not a TCP packet, line $lnum, byte 0x0009: " .
+      sprintf("%02x", $b) . "\n";
+    }
+
+    # Parse TCP header
+
+    my $tcp_hdr_len = (unpack("C", substr($raw_data, $ip_hdr_len + 12, 1)) &
+           0xF0) / 4;
+    if ($tcp_hdr_len < 20) {
+  die "$O: Impossible TCP header length, line $lnum: $tcp_hdr_len\n";
+    }
+
+    my $tmp_src_tcp_port = unpack("n", substr($raw_data, $ip_hdr_len + 0, 2));
+    if ($pktnum == 0) {
+  $src_tcp_port = $tmp_src_tcp_port;
+    } elsif ($tmp_src_tcp_port != $src_tcp_port) {
+  die "$O: Source TCP ports differ, line $lnum: $tmp_src_tcp_port vs $src_tcp_port\n";
+    }
+
+    my $tmp_dst_tcp_port = unpack("n", substr($raw_data, $ip_hdr_len + 2, 2));
+    if ($pktnum == 0) {
+  $dst_tcp_port = $tmp_dst_tcp_port;
+    } elsif ($tmp_dst_tcp_port != $dst_tcp_port) {
+  die "$O: Destination TCP ports differ, line $lnum: $tmp_dst_tcp_port vs $dst_tcp_port\n";
+    }
+
+    my $tcp_flags = unpack("C", substr($raw_data, $ip_hdr_len + 13, 1));
+    my $tcp_urg_flag = (($tcp_flags & 0x20) != 0);
+    my $tcp_ack_flag = (($tcp_flags & 0x10) != 0);
+    my $tcp_psh_flag = (($tcp_flags & 0x08) != 0);
+    my $tcp_rst_flag = (($tcp_flags & 0x04) != 0);
+    my $tcp_syn_flag = (($tcp_flags & 0x02) != 0);
+    my $tcp_fin_flag = (($tcp_flags & 0x01) != 0);
+
+    if ($tcp_urg_flag) {
+  die "$O: Cannot handle TCP packet with URG flag true, line $lnum\n";
+    }
+    if (! $tcp_ack_flag) {
+  die "$O: Cannot handle TCP packet with ACK flag false, line $lnum\n";
+    }
+    if ($tcp_rst_flag) {
+  die "$O: Cannot handle TCP packet with RST flag true, line $lnum\n";
+    }
+
+    my $raw_tcp_seq_num = unpack("N", substr($raw_data, $ip_hdr_len + 4, 4));
+    my $cur_tcp_seq_num;
+
+    # Handle TCP sequence number wrap-arounds (although this code might
+    # not be correct for modern TCP/IP implementations!)
+
+    if ($pktnum == 0) {
+  $initial_tcp_seq_num = $raw_tcp_seq_num;
+  if ($tcp_syn_flag) {
+      $initial_tcp_seq_num++;
+  }
+  $cur_tcp_seq_num = 0;
+    } else {
+  $cur_tcp_seq_num = $raw_tcp_seq_num - $initial_tcp_seq_num;
+  if ($cur_tcp_seq_num < 0) {
+      # Perl complains if we add by 0x100000000 (non-portable hex)
+      $cur_tcp_seq_num += 0x80000000;
+      $cur_tcp_seq_num += 0x80000000;
+  }
+    }
+
+    # Check if packet is in sequence
+
+    if ($pktnum != 0) {
+  # Check previous TCP packet to calculate expected sequence number
+  my $expected_seq_num = $tcp_seq_num[$#tcp_seq_num] +
+      length($payload_data[$#payload_data]);
+
+  if ($expected_seq_num > 0xFFFFFFFF) {
+      die "$O: Cannot handle TCP seq num overflow, line $lnum\n";
+  }
+
+  if ($cur_tcp_seq_num != $expected_seq_num) {
+      my $seq_num_diff = $cur_tcp_seq_num - $expected_seq_num;
+
+      if ($debug && $debug_tcpip) {
+    print "Note: Packet $pktnum is out of order, line $lnum:\n" .
+          "  expecting seqnum $expected_seq_num, found $cur_tcp_seq_num " .
+          "(diff $seq_num_diff)\n";
+      }
+
+      if ($seq_num_diff > 0) {
+    # One or more packets have been lost somewhere (and
+    # hopefully retransmitted at a later stage).  Do nothing
+    # (and pray for the best)
+
+    if ($debug && $debug_tcpip) {
+        print "  (One or more packets have been lost; hoping for the best)\n\n";
+    }
+      } else {
+    # This packet has been retransmitted: search backwards
+    # until a suitable point of insertion is found
+
+    my $found = 0;
+    for (my $idx = $#tcp_seq_num; $idx >= 0; $idx--) {
+        if (($cur_tcp_seq_num == $tcp_seq_num[$idx]) &&
+            (length($payload_data[$idx]) != 0)) {
+      # Packet is already present at $idx: replace it
+
+      if ($debug && $debug_tcpip) {
+          print "  (Replacing existing packet $idx)\n\n";
+      }
+
+      if ((length($raw_data) - $ip_hdr_len - $tcp_hdr_len)
+          != length($payload_data[$idx])) {
+          die "$O: Replacement packet has a different data len, line $lnum:" .
+        (length($raw_data) - $ip_hdr_len - $tcp_hdr_len) .
+        " vs " . length($payload_data[$idx]) . "\n";
+      }
+
+      $pktnum = $idx;
+      $found = 1;
+      last;
+        } elsif ($cur_tcp_seq_num >= $tcp_seq_num[$idx]) {
+      # Insert (ie, make room for) the new packet at $idx + 1
+
+      if ($debug && $debug_tcpip) {
+          print "  (Inserting after packet $idx)\n\n";
+      }
+
+      $pktnum = $idx + 1;
+
+      splice(@ip_hdr_data, $pktnum, 0, undef);
+      splice(@tcp_hdr_data, $pktnum, 0, undef);
+      splice(@tcp_seq_num, $pktnum, 0, undef);
+      splice(@payload_data, $pktnum, 0, undef);
+
+      $found = 1;
+      last;
+        }
+    }
+    if (! $found) {
+        die "$O: Could not insert out-of-order packet, line $lnum: packet $pktnum\n";
+    }
+      }
+  }
+    }
+
+    # Save the data into appropriate string arrays
+
+    $ip_hdr_data[$pktnum] = substr($raw_data, 0, $ip_hdr_len);
+    $tcp_hdr_data[$pktnum] = substr($raw_data, $ip_hdr_len, $tcp_hdr_len);
+    $tcp_seq_num[$pktnum] = $cur_tcp_seq_num;
+    $payload_data[$pktnum] = substr($raw_data, $ip_hdr_len + $tcp_hdr_len);
+
+    if ($debug && $debug_tcpip) {
+  print "Packet $pktnum: (IP hdr len ", length($ip_hdr_data[$pktnum]),
+        ", TCP hdr len ", length($tcp_hdr_data[$pktnum]),
+        ", data len ", length($payload_data[$pktnum]), "), line $lnum\n";
+  print "  from $src_ip_addr (port $src_tcp_port)" .
+        " to $dst_ip_addr (port $dst_tcp_port)\n";
+  printf "  raw seqnum %u rel %u (diff %d), flags PSH=%s SYN=%s FIN=%s\n\n",
+        $raw_tcp_seq_num, $cur_tcp_seq_num,
+        (($pktnum == 0) ? 0 : $cur_tcp_seq_num - $tcp_seq_num[$pktnum - 1]),
+        bool($tcp_psh_flag), bool($tcp_syn_flag), bool($tcp_fin_flag);
+
+  dump_string $ip_hdr_data[$pktnum],  "     ip ";
+  dump_string $tcp_hdr_data[$pktnum], "    tcp ";
+  dump_string $payload_data[$pktnum], "   data ";
+  print "\n";
+    }
+
+} continue {
+    $pktnum = $#ip_hdr_data + 1;
+}
+
+close(INFILE);
+
+
+#########################################################################
+# Check for missing TCP/IP packets in the tcpdump
+
+if ($debug) {
+    print "Checking for missing packets in tcpdump\n\n";
+}
+
+my $bytes_missing = 0;
+my $expected_seq_num = 0;
+for ($pktnum = 0; $pktnum <= $#tcp_seq_num; $pktnum++) {
+    my $seq_num_diff = $tcp_seq_num[$pktnum] - $expected_seq_num;
+    if ($seq_num_diff < 0) {
+  # This should never happen (packet reordering handled above)
+  die "$O: Data out of order at packet $pktnum: " .
+      "rel seq num $tcp_seq_num[$pktnum], diff $seq_num_diff\n";
+    } elsif ($seq_num_diff > 0) {
+  $bytes_missing += $seq_num_diff;
+
+  if (! $ignore_missing) {
+      die "$O: Missing data at packet $pktnum: " .
+    "rel seq num $tcp_seq_num[$pktnum], diff $seq_num_diff\n";
+  } elsif (! $debug) {
+      warn "$O: Missing data at packet $pktnum: " .
+    "rel seq num $tcp_seq_num[$pktnum], diff $seq_num_diff" .
+    ($insert_zeros ? " (zeros inserted)\n" : "\n");
+  } elsif ($debug) {
+      print "Missing data at packet $pktnum: " .
+    "rel seq num $tcp_seq_num[$pktnum], diff $seq_num_diff" .
+    (($insert_zeros) ? " (zeros inserted)\n" : "\n");
+  }
+
+  if ($insert_zeros) {
+      splice(@ip_hdr_data, $pktnum, 0, (chr(0) x 20));
+      splice(@tcp_hdr_data, $pktnum, 0, (chr(0) x 32));
+      splice(@tcp_seq_num, $pktnum, 0, ($expected_seq_num));
+      splice(@payload_data, $pktnum, 0, (chr(0) x $seq_num_diff));
+  }
+    }
+
+    $expected_seq_num += length($payload_data[$pktnum]);
+#@@@    $expected_seq_num = $tcp_seq_num[$pktnum] + length($payload_data[$pktnum]);
+}
+
+if ($debug && ($bytes_missing > 0)) {
+    print "Total missing: $bytes_missing bytes\n\n";
+}
+
+
+#########################################################################
+# Parse the data stream as a series of (possibly partial) RTMP packets
+
+    # This script is based on the (reverse-engineered) documentation
+    # found on the following web sites:
+    #   http://osflash.org/documentation/rtmp
+    #   http://wiki.gnashdev.org/RTMP
+    #   http://rtmpy.org/wiki/RTMP
+    #   http://www.acmewebworks.com/Downloads/openCS/TheAMF.pdf
+
+    # Partial RTMP packet structure:
+    #   First byte, as binary:
+    #     |00aaaaaa| - 12-byte header, aaaaaa (in binary) = AMF index
+    #     |01aaaaaa| -  8-byte header, aaaaaa (in binary) = AMF index
+    #     |10aaaaaa| -  4-byte header, aaaaaa (in binary) = AMF index
+    #     |11aaaaaa| -  1-byte header, aaaaaa (in binary) = AMF index
+    #
+    #   Following bytes (if 4-, 8- or 12-byte header), as hexadecimal:
+    #     |tt|tt|tt|    - Time stamp, in MSB (network) order
+    #     |ss|ss|ss|    - Length (size) of AMF packet data, MSB (network) order
+    #     |cc|          - RTMP packet content type
+    #     |rr|rr|rr|rr| - Routing information, in LSB order (usually a
+    #                     small integer)
+
+if ($debug) {
+    print "Parsing data stream as RTMP\n\n";
+}
+
+datastream_rewind();
+
+my $b = unpack("C", datastream_read(1));
+if ($b == 0x03) {
+    my $tmp = datastream_read(3072);
+    if ($debug && $debug_rtmp) {
+  print "Found RTMP handshake response (ignoring following 3072 bytes)\n";
+  dump_string $tmp, "    del ";
+  print "\n";
+    }
+} else {
+    datastream_rewind();
+    if ($debug) {
+  printf "Note: RTMP handshake response byte 0x03 not found: " .
+         "found byte 0x%02x,\n" .
+         "assuming start of proper RTMP packet stream.\n\n", $b;
+    } else {
+  warn "$O: RTMP handshake response byte 0x03 not found: " .
+       sprintf("found byte 0x%02x,\n", $b) .
+       "assuming start of proper RTMP packet stream.\n";
+    }
+}
+
+if ($debug && $debug_rtmp) {
+    print "Default RTMP chunk size: $def_rtmp_chunk_size bytes\n\n";
+}
+
+$rtmp_chunk_size = $def_rtmp_chunk_size;
+$pktnum = 0;
+
+RTMP_PROC:
+while (! $datastream_eof) {
+
+    datastream_remember();    # For debugging only
+
+    # Parse next (potentially partial) RTMP packet
+
+    my $cur_first_byte = unpack("C", datastream_read(1));
+    last RTMP_PROC if ($datastream_eof || ! defined($cur_first_byte));
+
+    if ($insert_zeros && ($bytes_missing > 0) && ($cur_first_byte == 0x00)) {
+  # Handle possible missing packets
+  if (($pktnum > 0) &&
+      (length($rtmp_payload[$pktnum - 1]) != $rtmp_data_len[$pktnum - 1])) {
+      # Continue as if this packet was a one-byte header
+      $cur_first_byte = (unpack("C", substr($rtmp_hdr_data[$pktnum - 1], 0, 1))
+    & 0x3F) | 0xC0;
+      if ($debug) {
+    printf "Note: NUL byte while looking for RTMP header: " .
+           "treating as 0x%02x,\n", $cur_first_byte;
+    print "data byte $saved_bytenum, IP packet $saved_pktnum, offset $saved_idx\n\n";
+      }
+  } else {
+      # Skip all NUL bytes
+      my $skip_count = 0;
+      while ($cur_first_byte == 0x00) {
+    $skip_count++;
+    datastream_remember();
+    $cur_first_byte = unpack("C", datastream_read(1));
+    last RTMP_PROC if ($datastream_eof || ! defined($cur_first_byte));
+      }
+      if ($debug) {
+    print "Note: Skipped $skip_count NUL bytes looking for next RTMP header\n\n";
+      }
+  }
+    }
+
+    my $cur_hdr_size;
+
+    if (($cur_first_byte & 0xC0) == 0x00) {
+  $cur_hdr_size = 12;
+    } elsif (($cur_first_byte & 0xC0) == 0x40) {
+  $cur_hdr_size = 8;
+    } elsif (($cur_first_byte & 0xC0) == 0x80) {
+  $cur_hdr_size = 4;
+    } elsif (($cur_first_byte & 0xC0) == 0xC0) {
+  $cur_hdr_size = 1;
+    }
+
+    my $cur_amf_index = $cur_first_byte & 0x3F;
+    my $cur_hdr_data = pack("C", $cur_first_byte) . datastream_read($cur_hdr_size - 1);
+
+    # Extract pertinent information from the rest of the header.  This
+    # code assumes that a 1-byte header will never occur by itself: a
+    # longer header will be always sent before such headers.
+
+    my $cur_time_stamp;
+    my $cur_data_len;
+    my $cur_type;
+    my $cur_routing_id;
+
+    if ($cur_hdr_size >= 4) {
+  $cur_time_stamp = unpack("N", chr(0) . substr($cur_hdr_data, 1, 3));
+    }
+    if ($cur_hdr_size >= 8) {
+  $cur_data_len = unpack("N", chr(0) . substr($cur_hdr_data, 4, 3));
+  $cur_type = unpack("C", substr($cur_hdr_data, 7, 1));
+    }
+    if ($cur_hdr_size == 12) {
+  $cur_routing_id = unpack("V", substr($cur_hdr_data, 8, 4));
+  if (($cur_routing_id < 0) || ($cur_routing_id > $max_rtmp_routing_id)) {
+      die "$O: Illegal value for RTMP routing ID: " .
+    sprintf("0x%08x,\n", $cur_routing_id) .
+    "data byte $saved_bytenum, IP packet $saved_pktnum, offset $saved_idx\n";
+  }
+    }
+
+    my $found = 0;
+    for (my $idx = $#rtmp_amf_index; $idx >= 0; $idx--) {
+  if ($cur_amf_index == $rtmp_amf_index[$idx]) {
+      if (length($rtmp_payload[$idx]) == $rtmp_data_len[$idx]) {
+    if ($cur_hdr_size > 1) {
+        # A new RTMP packet is present
+        $found = 0;
+        last;
+    } else {
+        # A partial header, but previous same-index RTMP
+        # packet is already complete
+        die "$O: Short-length RTMP header " .
+      sprintf("0x%02x", $cur_first_byte) .
+      " without a previous full-length header:\n" .
+      "data byte $saved_bytenum, IP packet $saved_pktnum, offset $saved_idx\n";
+    }
+      } else {
+    # Currently stored packet data (payload) is not complete
+    if ($cur_hdr_size < 4) {
+        $cur_time_stamp = $rtmp_time_stamp[$idx];
+    } else {
+        if ($cur_time_stamp != $rtmp_time_stamp[$idx]) {
+      # Update the RTMP time stamp
+      $rtmp_time_stamp[$idx] = $cur_time_stamp;
+        }
+    }
+    if ($cur_hdr_size < 8) {
+        $cur_data_len = $rtmp_data_len[$idx];
+        $cur_type = $rtmp_type[$idx];
+    } else {
+        if ($cur_data_len != $rtmp_data_len[$idx]) {
+      die "$O: Partial RTMP data length mismatch, " .
+          "data byte $saved_bytenum, IP packet $saved_pktnum, offset $saved_idx:\n" .
+          "expecting $rtmp_data_len[$idx], found $cur_data_len\n";
+        }
+        if ($cur_type != $rtmp_type[$idx]) {
+      die "$O: Partial RTMP packet type mismatch, " .
+          "data byte $saved_bytenum, IP packet $saved_pktnum, offset $saved_idx:\n" .
+          "expecting $rtmp_type[$idx], found $cur_type\n";
+        }
+    }
+    if ($cur_hdr_size < 12) {
+        $cur_routing_id = $rtmp_routing_id[$idx];
+    } else {
+        if ($cur_routing_id != $rtmp_routing_id[$idx]) {
+      die "$O: Partial RTMP routing ID mismatch, " .
+          "data byte $saved_bytenum, IP packet $saved_pktnum, offset $saved_idx:\n" .
+          "expecting $rtmp_routing_id[$idx], found $cur_routing_id\n";
+        }
+    }
+
+    $pktnum = $idx;
+    $found = 1;
+    last;
+      }
+  }
+    }
+    if (! $found) {
+  if ($cur_hdr_size > 1) {
+      # A new RTMP packet: store it appropriately
+
+      if ($cur_hdr_size < 8) {
+    # Assume the same as the last RTMP packet
+    $cur_data_len = $rtmp_data_len[$#rtmp_data_len];
+    $cur_type = $rtmp_type[$#rtmp_type];
+      }
+      if ($cur_hdr_size < 12) {
+    # Assume the same as the last RTMP packet
+    $cur_routing_id = $rtmp_routing_id[$#rtmp_routing_id];
+      }
+
+      $rtmp_hdr_data[$pktnum] = $cur_hdr_data;
+      $rtmp_amf_index[$pktnum] = $cur_amf_index;
+      $rtmp_time_stamp[$pktnum] = $cur_time_stamp;
+      $rtmp_data_len[$pktnum] = $cur_data_len;
+      $rtmp_type[$pktnum] = $cur_type;
+      $rtmp_routing_id[$pktnum] = $cur_routing_id;
+      $rtmp_payload[$pktnum] = "";
+  } else {
+      die "$O: Short-length RTMP header " . sprintf("0x%02x", $cur_first_byte) .
+    " without a previous full-length header:\n" .
+    "data byte $saved_bytenum, IP packet $saved_pktnum, offset $saved_idx\n";
+  }
+    }
+
+    # Store RTMP payload data at $pktnum
+
+    my $data_len_diff = $cur_data_len - length($rtmp_payload[$pktnum]);
+    my $cur_payload = datastream_read((($data_len_diff > $rtmp_chunk_size) ?
+               $rtmp_chunk_size : $data_len_diff));
+    $rtmp_payload[$pktnum] .= $cur_payload;
+
+    my $cur_completed = (length($rtmp_payload[$pktnum]) == $cur_data_len);
+
+    if ($debug && $debug_rtmp) {
+  print ($cur_completed ? "Complete" : "Partial");
+  print " RTMP packet $pktnum at byte $saved_bytenum (IP packet $saved_pktnum, offset $saved_idx)\n";
+
+  printf "  (hdr len %d, AMF index %d, type 0x%02x, routing ID 0x%08x,\n" .
+      "  full data len %d, cur data len %d, time stamp %d)\n\n",
+      $cur_hdr_size, $cur_amf_index, $cur_type, $cur_routing_id,
+      $cur_data_len, length($rtmp_payload[$pktnum]), $cur_time_stamp;
+
+  dump_string $cur_hdr_data, "   rtmp ";
+  dump_string $cur_payload,  "   data ";
+  print "\n";
+    }
+
+    # Partially process the information in the complete RTMP packet
+
+    if ($cur_completed) {
+  $cur_payload = $rtmp_payload[$pktnum];
+
+  if ($cur_type == 0x01) {
+      # Chunk size
+
+      if (($cur_data_len >= 2) &&
+    (unpack("C", substr($cur_payload, 0, 1)) == 0x00)) {
+    $rtmp_chunk_size = unpack("N", (chr(0) x (5 - $cur_data_len)) . substr($cur_payload, 1));
+    if ($debug && $debug_rtmp) {
+        print "New RTMP chuck size: $rtmp_chunk_size bytes\n\n";
+    }
+      } else {
+    die "$O: Cannot handle unknown RTMP Chunk Size message,\n" .
+        "data byte $saved_bytenum, IP packet $saved_pktnum, offset $saved_idx\n";
+      }
+
+  } elsif ($cur_type == 0x03) {
+      # Bytes read
+  } elsif ($cur_type == 0x04) {
+      # Ping
+  } elsif ($cur_type == 0x05) {
+      # Server bandwidth
+  } elsif ($cur_type == 0x06) {
+      # Client bandwidth
+  } elsif ($cur_type == 0x08) {
+      # Audio data
+  } elsif ($cur_type == 0x09) {
+      # Video data
+  } elsif ($cur_type == 0x0F) {
+      # Flex stream
+  } elsif ($cur_type == 0x10) {
+      # Flex shared object
+  } elsif ($cur_type == 0x11) {
+      # Flex message
+  } elsif ($cur_type == 0x12) {
+      # Notify
+  } elsif ($cur_type == 0x13) {
+      # Shared object
+  } elsif ($cur_type == 0x14) {
+      # Invoke RPC
+  } elsif ($cur_type == 0x16) {
+      # FLV data
+  } else {
+      # Unknown (and undocumented)
+      if ($debug) {
+    printf "  RTMP packet content type 0x%02x unknown\n\n", $cur_type;
+      } else {
+    warn sprintf("$O: RTMP packet content type 0x%02x unknown in packet $pktnum,\n",
+           $cur_type) .
+         "data byte $saved_bytenum, IP packet $saved_pktnum, offset $saved_idx\n";
+      }
+  }
+    }
+
+} continue {
+    $pktnum = $#rtmp_hdr_data + 1;
+}
+
+
+#########################################################################
+# Extract FLV stream from the RTMP data stream
+
+    # This script is based on the documentation found on the following
+    # web sites:
+    #   http://www.adobe.com/devnet/flv/pdf/video_file_format_spec_v9.pdf
+    #   http://osflash.org/flv
+
+    # FLV file structure:
+    #   File header, 9 bytes:
+    #     |"FLV"|01|    - FLV file signature and version number (1)
+    #     |tt|          - Type of FLV file: 0x05 = audio+video
+    #     |dd|dd|dd|dd| - Data offset (size of header), always 9 (MSB)
+    #   Tag0Size - always zero (4 bytes, MSB)
+    #   Tag1, variable number of bytes:
+    #     |cc|       - Tag content type:
+    #                    0x08 = audio, 0x09 = video, 0x18 = script data
+    #     |ss|ss|ss| - Length of FLV data following tag header (MSB)
+    #     |tt|tt|tt| - Time stamp (MSB)
+    #     |uu|       - Upper 8 bits of time stamp (to form 32-bit number)
+    #     |ii|ii|ii| - Stream ID, always zero
+    #     Tag data   - Data as appropriate for the content type
+    #   Tag1Size - size of tag header + data (4 bytes, MSB)
+    #   Tag2     - as per Tag1
+    #   Tag2Size - as per Tag1Size
+    #   ...
+    #   TagN     - as per Tag1
+    #   TagNSize - as per Tag1Size
+
+if ($debug) {
+    print "Extracting FLV stream from RTMP data stream\n\n";
+}
+
+# Search for start of FLV stream: RTMP packet 0x14 with "NetStream.Play.Start"
+
+my $found = 0;
+$pktnum = 0;
+while ($pktnum <= $#rtmp_type) {
+    if ($rtmp_type[$pktnum] == 0x14) {
+  my $payload = $rtmp_payload[$pktnum];
+  if ((substr($payload, 0, 11) eq "\x02\x00\x08onStatus") &&
+      ($payload =~ /\x00\x04code\x02\x00\x14NetStream\.Play\.Start/)) {
+      if ($payload =~ /\x00\x0Bdescription\x02..Started playing (.*?)\.?\x00/) {
+    $found = 1;
+    $flv_name = $1;
+    if ($debug) {
+        print "Found FLV stream $flv_name\n";
+        if ($debug_flv) {
+      print "  at RTMP packet $pktnum\n";
+        }
+    }
+    last;
+      }
+  }
+    }
+} continue {
+    $pktnum++;
+}
+
+if (! $found) {
+    die "$O: Could not find start of FLV stream\n";
+}
+
+# Search for start of data: RTMP packet 0x12 with "NetStream.Data.Start"
+
+$found = 0;
+while ($pktnum <= $#rtmp_type) {
+    if ($rtmp_type[$pktnum] == 0x12) {
+  my $payload = $rtmp_payload[$pktnum];
+  if ((substr($payload, 0, 11) eq "\x02\x00\x08onStatus") &&
+      ($payload =~ /\x00\x04code\x02\x00\x14NetStream\.Data\.Start/)) {
+      $found = 1;
+      if ($debug && $debug_flv) {
+    print "Found NetStream.Data.Start at RTMP packet $pktnum\n\n";
+      }
+      last;
+  }
+    }
+} continue {
+    $pktnum++;
+}
+
+if (! $found) {
+    die "$O: Could not find start of data in FLV stream\n";
+}
+
+# Open output file and write FLV file header
+
+if ($debug) {
+    print "Writing FLV stream to $outfile\n";
+}
+
+open(OUTFILE, ">", $outfile)
+    or die "$O: Could not write to $outfile: $!\n";
+binmode(OUTFILE);
+
+    # Write the FLV file header: "FLV", version 1, type: audio+video,
+    # header length: 9, Tag0Size: 0.
+
+print OUTFILE "FLV" . pack("C*", 1, 5) . pack("N", 9) . pack("N", 0);
+
+# Next RTMP packet must contain onMetaData
+
+$pktnum++;
+$found = 0;
+if ($pktnum <= $#rtmp_type) {
+    if ($rtmp_type[$pktnum] == 0x12) {
+  my $payload = $rtmp_payload[$pktnum];
+  if (substr($payload, 0, 13) eq "\x02\x00\x0AonMetaData") {
+      $found = 1;
+      if ($debug && $debug_flv) {
+    print "Found onMetaData in RTMP packet $pktnum\n";
+      }
+  }
+    }
+}
+
+if (! $found) {
+    die "$O: Could not find start of data in FLV stream\n";
+}
+
+# Output the onMetaData packet, using the FLV tag header format
+
+my $flv_tag_hdr;
+my $flv_tag_len;
+
+$flv_tag_hdr = pack("C", 0x12) . packN24($rtmp_data_len[$pktnum],
+        $rtmp_time_stamp[$pktnum]) . pack("C", 0) . packN24(0);
+$flv_tag_len = pack("N", $rtmp_data_len[$pktnum] + length($flv_tag_hdr));
+
+print OUTFILE $flv_tag_hdr;
+print OUTFILE $rtmp_payload[$pktnum];
+print OUTFILE $flv_tag_len;
+
+if ($debug && $debug_flv) {
+    print "\nWriting onMetaData to FLV file\n";
+    dump_string $flv_tag_hdr,           "    tag ";
+    dump_string $rtmp_payload[$pktnum], "   data ";
+    dump_string $flv_tag_len,           "    len ";
+    print "\n";
+}
+
+# Skip next one or more packets, if these are "synchronisation" video packets
+
+$pktnum++;
+while (($pktnum <= $#rtmp_type) && ($rtmp_type[$pktnum] == 0x09)
+       && ($rtmp_data_len[$pktnum] == 2)
+       && (substr($rtmp_payload[$pktnum], 0, 1) eq "\x52")) {
+    if ($debug && $debug_flv) {
+  print "Skipping RTMP packet $pktnum: synchronisation packet only\n\n";
+    }
+    $pktnum++;
+}
+
+if ($pktnum > $#rtmp_type) {
+    die "$O: RTMP data stream ended before initial audio/video packet\n";
+}
+
+# Handle main FLV data stream: individual RTMP video/audio packets for
+# the initial chunks, or 0x16 pre-packaged FLV chunks that can be
+# (hopefully) written straight out
+
+$found = 0;
+while ($pktnum <= $#rtmp_type) {
+    if (($rtmp_type[$pktnum] == 0x08) || ($rtmp_type[$pktnum] == 0x09)) {
+  $found = 1;
+  $flv_tag_hdr = pack("C", $rtmp_type[$pktnum]) .
+      packN24($rtmp_data_len[$pktnum], $rtmp_time_stamp[$pktnum]) .
+      pack("C", 0) . packN24(0);
+  $flv_tag_len = pack("N", $rtmp_data_len[$pktnum] + length($flv_tag_hdr));
+
+  print OUTFILE $flv_tag_hdr;
+  print OUTFILE $rtmp_payload[$pktnum];
+  print OUTFILE $flv_tag_len;
+
+  if ($debug && $debug_flv) {
+      printf "Writing RTMP packet $pktnum (type 0x%02x) to FLV file\n",
+       $rtmp_type[$pktnum];
+      dump_string $flv_tag_hdr,           "    tag ";
+      dump_string $rtmp_payload[$pktnum], "   data ";
+      dump_string $flv_tag_len,           "    len ";
+      print "\n";
+  }
+    } elsif ($rtmp_type[$pktnum] == 0x16) {
+  $found = 1;
+  flv_data_init($pktnum);
+
+  # Do we need to inspect the contents of $rtmp_payload?  For the
+  # moment, we just dump everything as-is.
+  print OUTFILE $rtmp_payload[$pktnum];
+
+  if ($debug && $debug_flv) {
+      print "Writing RTMP packet $pktnum (type 0x16) to FLV file as-is (" .
+      length($rtmp_payload[$pktnum]) . " bytes)\n\n";
+  }
+    } elsif ($rtmp_type[$pktnum] == 0x04) {
+  # Ping packet: skip this packet
+  if ($debug && $debug_flv) {
+      print "Skipping RTMP packet $pktnum (type 0x04)\n\n";
+  }
+    } else {
+  last;
+    }
+} continue {
+    $pktnum++;
+}
+
+# Current RTMP packet must contain RTMP type 0x12 with "NetStream.Play.Complete"
+
+$found = 0;
+if ($pktnum <= $#rtmp_type) {
+    if ($rtmp_type[$pktnum] == 0x12) {
+  my $payload = $rtmp_payload[$pktnum];
+  if ((substr($payload, 0, 15) eq "\x02\x00\x0ConPlayStatus") &&
+      ($payload =~ /\x00\x04code\x02\x00\x17NetStream\.Play\.Complete/)) {
+      $found = 1;
+      if ($debug && $debug_flv) {
+    print "Found NetStream.Play.Complete at RTMP packet $pktnum\n\n";
+      }
+  }
+    }
+}
+
+if (! $found) {
+    die "$O: Could not find end of data in FLV stream\n";
+}
+
+if ($debug && $debug_flv) {
+    print "Closing FLV file $outfile\n";
+}
+
+close OUTFILE;
+exit 0;
+
+
+#########################################################################
+# Dump the contents of a string in hexadecimal to standard output
+
+sub dump_string ($;$) {
+    my $data   = $_[0];         # Data to be printed
+    my $prefix = (defined($_[1]) ? $_[1] : "");   # Prefix for each line
+
+    my $len = length($data);
+
+    for (my $idx = 0; $idx < $len / 16; $idx++) {
+  print $prefix;
+  printf "0x%04x: ", $idx * 16;
+
+  for (my $j = $idx * 16; $j < ($idx + 1) * 16; $j++) {
+      print " " if (($j % 2) == 0);
+      if ($j < $len) {
+    printf "%02x", unpack("C", substr($data, $j, 1));
+      } else {
+    print "  ";
+      }
+  }
+
+  print "  ";
+
+  for (my $j = $idx * 16; $j < ($idx + 1) * 16; $j++) {
+      if ($j < $len) {
+    my $c = unpack("C", substr($data, $j, 1));
+    print ((($c >= 0x20) && ($c < 0x7F)) ? chr($c) : ".");
+      }
+  }
+
+  print "\n";
+    }
+}
+
+
+#########################################################################
+# Return a string representing a boolean as "t" or "f"
+
+sub bool ($) {
+    my $bool = $_[0];
+
+    return ($bool ? "t" : "f");
+}
+
+
+#########################################################################
+# Pack a series of integers as 24-bit MSB strings
+
+sub packN24 (@) {
+    my @ints = @_;
+    my $r = "";
+
+    foreach my $i (@ints) {
+  my $t = pack("N", $i);
+  $r .= substr($t, 1);    # Assume that $i does not overflow
+    }
+
+    return $r;
+}
+
+
+#########################################################################
+# Restart reading from the data stream
+
+sub datastream_rewind () {
+    $datastream_eof = 0;
+    $datastream_bytenum = 0;
+    $datastream_pktnum = 0;
+    $datastream_idx = 0;
+}
+
+
+#########################################################################
+# Remember current position of the data stream
+
+sub datastream_remember () {
+    $saved_eof = $datastream_eof;
+    $saved_bytenum = $datastream_bytenum;
+    $saved_pktnum = $datastream_pktnum;
+    $saved_idx = $datastream_idx;
+}
+
+
+#########################################################################
+# Read a number of bytes from the data stream
+
+sub datastream_read ($) {
+    my $num = $_[0];      # Number of bytes to read
+    my $left = $num;
+
+    if ($num < 1) {
+  return "";
+    } else {
+  my $res = "";
+  while ((length($res) < $num) && ($datastream_pktnum <= $#payload_data)) {
+      my $s = substr($payload_data[$datastream_pktnum], $datastream_idx, $left);
+      if ((length($s) == 0) || ($datastream_idx + length($s) >=
+              length($payload_data[$datastream_pktnum]))) {
+    $datastream_pktnum++;
+    $datastream_idx = 0;
+      } else {
+    $datastream_idx += length($s);
+      }
+      $res .= $s;
+      $left -= length($s);
+  }
+  $datastream_eof = ($datastream_pktnum > $#payload_data);
+  $datastream_bytenum += length($res);
+  return $res;
+    }
+}
+
+
+#########################################################################
+# Set up reading from the FLV / RTMP data stream
+
+sub flv_data_init ($) {
+    $flv_data_eof = 0;
+    $flv_data_bytenum = 0;
+    $flv_data_pktnum = $_[0];
+    $flv_data_idx = 0;
+}
+
+
+#########################################################################
+# Read a number of bytes from the FLV / RTMP data stream
+
+sub flv_data_read ($) {
+    # Not implemented
+}

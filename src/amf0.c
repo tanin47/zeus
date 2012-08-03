@@ -1,5 +1,53 @@
 #include <amf0.h>
 
+Amf0GenericInvokeMessage *amf0_create_generic_invoke_message() {
+  Amf0GenericInvokeMessage *msg = malloc(sizeof(Amf0GenericInvokeMessage));
+  msg->command = NULL;
+  msg->description = NULL;
+
+  return msg;
+}
+
+void amf0_destroy_generic_invoke_message(Amf0GenericInvokeMessage *msg) {
+  bdestroy(msg->command);
+  bdestroy(msg->description);
+  // msg->transaction_id = 0.0;
+  // if (msg->arguments != NULL) amf0_destroy_object(msg->arguments);
+}
+
+
+int amf0_serialize_generic_invoke_message(unsigned char *output, Amf0GenericInvokeMessage *msg) {
+  int i = 0;
+
+  i += amf0_serialize_string(output + i, msg->command);
+  i += amf0_serialize_string(output + i, msg->description);
+  // i += amf0_serialize_object(output + i, msg->arguments);
+
+  return i;
+}
+
+int amf0_deserialize_generic_invoke_message(Amf0GenericInvokeMessage *msg, unsigned char *input) {
+  unsigned int start = (unsigned int)input;
+
+  input++;
+  input += amf0_deserialize_string(&(msg->command), input);
+
+  input++;
+  input += amf0_deserialize_string(&(msg->description), input);
+
+  // if (input[0] == AMF0_NULL) {
+  //   msg->arguments = NULL;
+  //   input++;
+  // } else {
+  //   input++;
+  //   input += amf0_deserialize_object(&(msg->arguments), input);
+  // }
+
+  return (unsigned int)input - start;
+}
+
+
+
 Amf0ConnectMessage *amf0_create_connect_message() {
   Amf0ConnectMessage *msg = malloc(sizeof(Amf0ConnectMessage));
   msg->command = NULL;

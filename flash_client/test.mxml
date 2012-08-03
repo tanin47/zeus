@@ -61,18 +61,20 @@
             private function netStatusHandler(event:NetStatusEvent):void
             {
                 mx.controls.Alert.show(event.info.code);
-                if(event.info.code == "NetConnection.Connect.Success")
+                if (event.info.code == "NetConnection.Connect.Success")
                 {
                     _diskStream = new NetStream(_diskConn);
                     _diskStream.client = this;
                     _diskStream.attachCamera(_camera);
                     _diskStream.attachAudio(_mic);
                     _diskStream.publish("test", "record");
-
+                }
+                else if (event.info.code == "NetStream.Publish.Start")
+                {
                     // start the timer, which simulates a loading delay
-                    //loadTimer = new Timer(1000);
-                    //loadTimer.addEventListener(TimerEvent.TIMER, incrementTime);
-                    //loadTimer.start();
+                    loadTimer = new Timer(1000);
+                    loadTimer.addEventListener(TimerEvent.TIMER, incrementTime);
+                    loadTimer.start();
                 }
                 else 
                 {
@@ -91,6 +93,7 @@
                     loadTimer = null;
 
                     _diskStream.close();
+                    _diskConn.close();
                 }
             }
 

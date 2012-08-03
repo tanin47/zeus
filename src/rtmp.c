@@ -389,24 +389,27 @@ void rtmp_process_message(Rtmp *rtmp, RtmpOutputMessage *output) {
   } else if (rtmp->message_type == 0x09) {
     int start = 0;
 
-    while (start < rtmp->message_length) {
-      unsigned int payload_length = chars_to_int(rtmp->message + start + 1, 3);
+    // while (start < rtmp->message_length) {
+    //   unsigned int payload_length = chars_to_int(rtmp->message + start + 1, 3);
 
       // printf("====\n");
       // printf("message_type=%u\n", rtmp->message[start]);
       // printf("payload_length=%u\n", payload_length);
       // printf("timestamp=%u\n", chars_to_int(rtmp->message + start + 1 + 3, 4));
       // printf("stream_id=%u\n", chars_to_int(rtmp->message + start + 1 + 3 + 4, 3));
-      // //printf("whole_message_length=%u\n", rtmp->message_length);
       // printf("====\n");
-
-      start += 11 + payload_length;
-      break;
-    }
+      // break;
+    // }
 
     fwrite(rtmp->message, 1, rtmp->message_length, rtmp->file);
   } else if (rtmp->message_type == 0x11) {
     printf("AMF3 is not supported.\n");
+    exit(1);
+  } else if (rtmp->message_type == 0x02) {
+    printf("Abort\n");
+    exit(1);
+  } else {
+    printf("Unsupported Message Type\n");
     exit(1);
   }
 }
@@ -567,8 +570,29 @@ void rtmp_process_publish_message(Rtmp *rtmp, RtmpOutputMessage *output) {
   printf("Publishing Name: %s\n", bdata(cmd->publishing_name));
   printf("Publishing Type: %s\n", bdata(cmd->publishing_type));
 
-  
   amf0_destroy_publish_message(cmd);
+
+  // rtmp_allocate_output_message_content(ack, 27);
+
+  // int i = 0;
+  // unsigned char *msg = ack->message;
+  // msg[i++] = 0x02;
+
+  // msg[i++] = 0x00;msg[i++] = 0x00;msg[i++] = 0x00;
+  // int_to_byte_array(6, msg, i, 3);i += 3;
+
+  // msg[i++] = 0x04;
+
+  // msg[i++] = 0x00;
+  // msg[i++] = 0x00;  
+  // msg[i++] = 0x00;
+  // msg[i++] = 0x00;
+
+  // msg[i++] = 0x04;
+
+  // msg[i++] = 0x00;msg[i++] = 0x00;msg[i++] = 0x04;
+  // msg[i++] = 0x00;msg[i++] = 0x00;msg[i++] = 0x00;msg[i++] = 0x00;
+  // msg[i++] = 0x00;msg[i++] = 0x00;msg[i++] = 0x00;
 
   rtmp->file = fopen("file", "w");
 }

@@ -53,6 +53,18 @@ struct Amf0StrictArray {
   int length;
 };
 
+typedef struct {
+  bstring command;
+  bstring description;
+} Amf0GenericInvokeMessage;
+
+Amf0GenericInvokeMessage *amf0_create_generic_invoke_message();
+void amf0_destroy_generic_invoke_message(Amf0GenericInvokeMessage *msg);
+
+int amf0_serialize_generic_invoke_message(unsigned char *output, Amf0GenericInvokeMessage *msg);
+int amf0_deserialize_generic_invoke_message(Amf0GenericInvokeMessage *msg, unsigned char *input);
+
+
 
 
 typedef struct {
