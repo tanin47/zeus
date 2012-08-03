@@ -391,6 +391,9 @@ void rtmp_process_message(Rtmp *rtmp, RtmpOutputMessage *output) {
 
   if (rtmp->message_type == 0x14) {
     return rtmp_process_command_message(rtmp, output);
+  } else if (rtmp->message_type == 0x08) {
+    printf("Audio\n");
+    exit(1);
   } else if (rtmp->message_type == 0x09) {
     int start = 0;
 
