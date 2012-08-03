@@ -233,7 +233,12 @@ int rtmp_process_read_chunk_header(Rtmp *rtmp, RingBuffer *buffer, RtmpOutputMes
   unsigned char message_stream_id[4];
 
   RingBuffer_read(buffer, timestamp, 3);
-  rtmp->chunk_timestamp = chars_to_int(timestamp, 3);
+
+  if (rtmp->chunk_type == TYPE_0) {
+    rtmp->chunk_timestamp = chars_to_int(timestamp, 3);
+  } else {
+    rtmp->chunk_timestamp += chars_to_int(timestamp, 3);
+  }
 
   if (rtmp->chunk_type == TYPE_0 || rtmp->chunk_type == TYPE_1) {
     RingBuffer_read(buffer, message_length, 3);
@@ -401,12 +406,34 @@ void rtmp_process_message(Rtmp *rtmp, RtmpOutputMessage *output) {
       // break;
     // }
 
+    printf("t=%u\n", rtmp->chunk_timestamp);
+
+    unsigned char video_tag_header[] = {
+      0x09,
+      0x00, 0x00, 0x00,
+      0x00, 0x00, 0x00,
+      0x00,
+      0x00, 0x00, 0x00
+    };
+
+    unsigned char end_tag[] = {
+      0x00, 0x00, 0x00, 0x00
+    };
+
+    int_to_byte_array(rtmp->message_length, video_tag_header, 1, 3);
+    int_to_byte_array(rtmp->chunk_timestamp, video_tag_header, 4, 3);
+    int_to_byte_array(rtmp->message_length + 11, end_tag, 0, 4);
+
+    fwrite(video_tag_header, 1, 11, rtmp->file);
     fwrite(rtmp->message, 1, rtmp->message_length, rtmp->file);
+    fwrite(end_tag, 1, 4, rtmp->file);
+
   } else if (rtmp->message_type == 0x11) {
     printf("AMF3 is not supported.\n");
     exit(1);
   } else if (rtmp->message_type == 0x02) {
     printf("Abort\n");
+    if (rtmp->file != NULL) fclose(rtmp->file);
     exit(1);
   } else {
     printf("Unsupported Message Type\n");
@@ -594,5 +621,14 @@ void rtmp_process_publish_message(Rtmp *rtmp, RtmpOutputMessage *output) {
   // msg[i++] = 0x00;msg[i++] = 0x00;msg[i++] = 0x00;msg[i++] = 0x00;
   // msg[i++] = 0x00;msg[i++] = 0x00;msg[i++] = 0x00;
 
-  rtmp->file = fopen("file", "w");
+  rtmp->file = fopen("raw_data/file.flv", "w");
+
+  unsigned char flv_header[] = {
+    0x46, 0x4c, 0x56,
+    0x01,
+    0x01,
+    0x00, 0x00, 0x00, 0x09,
+    0x00, 0x00, 0x00, 0x00
+  };
+  fwrite(flv_header, 1, 13, rtmp->file);
 }
